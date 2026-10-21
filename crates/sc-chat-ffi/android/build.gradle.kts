@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "dev.scnative.chat"
     compileSdk = 35
+    System.getenv("ANDROID_NDK_HOME")?.let { ndkPath = it }
 
     defaultConfig {
         minSdk = 24
