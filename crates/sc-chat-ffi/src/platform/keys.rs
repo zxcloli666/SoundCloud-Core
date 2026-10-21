@@ -4,14 +4,14 @@ use sc_chat::{ChatError, ChatResult, KeyName, KeyStorage, KeyStore, Zeroizing};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum KeyFailure {
-    #[error("{message}")]
-    Unavailable { message: String },
+    #[error("{reason}")]
+    Unavailable { reason: String },
 }
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for KeyFailure {
     fn from(error: uniffi::UnexpectedUniFFICallbackError) -> Self {
         Self::Unavailable {
-            message: error.reason,
+            reason: error.reason,
         }
     }
 }

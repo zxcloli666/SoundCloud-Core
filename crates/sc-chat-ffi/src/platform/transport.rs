@@ -14,14 +14,14 @@ pub enum NetFailure {
     Unreachable,
     #[error("the request was cancelled")]
     Cancelled,
-    #[error("{message}")]
-    Other { message: String },
+    #[error("{reason}")]
+    Other { reason: String },
 }
 
 impl From<uniffi::UnexpectedUniFFICallbackError> for NetFailure {
     fn from(error: uniffi::UnexpectedUniFFICallbackError) -> Self {
         Self::Other {
-            message: error.reason,
+            reason: error.reason,
         }
     }
 }
@@ -32,7 +32,7 @@ impl From<NetFailure> for TransportError {
             NetFailure::Timeout => Self::Timeout,
             NetFailure::Unreachable => Self::Unreachable,
             NetFailure::Cancelled => Self::Cancelled,
-            NetFailure::Other { message } => Self::Other(message),
+            NetFailure::Other { reason } => Self::Other(reason),
         }
     }
 }
