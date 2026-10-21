@@ -1,0 +1,8 @@
+[bindings.kotlin]
+package_name = "dev.scnative.chat"
+cdylib_name = "sc_chat_ffi"
+
+[bindings.swift]
+module_name = "ScChat"
+ffi_module_name = "ScChatFFI"
+ffi_module_filename = "ScChatFFI"

@@ -1,0 +1,138 @@
+name: Chat mobile
+
+on:
+  push:
+    branches: [main]
+    tags: ["sc-chat-ffi-v*"]
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/chat-mobile.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/chat-mobile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CRATE: crates/sc-chat-ffi
+
+jobs:
+  android:
+    name: Android AAR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: android
+
+      - name: cargo-ndk
+        run: |
+          cargo install cargo-ndk --version 4.1.2 --locked
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}" >> "$GITHUB_ENV"
+
+      - name: Native libraries
+        run: >
+          cargo ndk --platform 24 -t arm64-v8a -t armeabi-v7a -t x86_64
+          -o "$CRATE/android/src/main/jniLibs"
+          build -p sc-chat-ffi --lib --release --locked
+
+      - name: Kotlin bindings
+        run: >
+          cargo run -p sc-chat-ffi --features bindgen --release --locked --bin uniffi-bindgen --
+          generate --library target/aarch64-linux-android/release/libsc_chat_ffi.so
+          --language kotlin --no-format --out-dir "$CRATE/android/src/main/kotlin"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "8.14.3"
+
+      - name: AAR
+        run: gradle -p "$CRATE/android" assembleRelease
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sc-chat-android
+          path: ${{ env.CRATE }}/android/build/outputs/aar/sc-chat-release.aar
+          if-no-files-found: error
+
+  ios:
+    name: iOS XCFramework
+    runs-on: macos-latest
+    env:
+      IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+      PACKAGE: target/ScChat
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim, x86_64-apple-ios
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          key: ios
+
+      - name: Static libraries
+        run: |
+          for target in aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios; do
+            cargo build -p sc-chat-ffi --lib --release --locked --target "$target"
+          done
+
+      - name: Swift bindings
+        run: >
+          cargo run -p sc-chat-ffi --features bindgen --release --locked --bin uniffi-bindgen --
+          generate --library target/aarch64-apple-ios/release/libsc_chat_ffi.a
+          --language swift --no-format --out-dir target/swift
+
+      - name: XCFramework
+        run: |
+          mkdir -p target/headers target/simulator "$PACKAGE/Sources/ScChat"
+          cp target/swift/ScChatFFI.h target/headers/
+          cp target/swift/ScChatFFI.modulemap target/headers/module.modulemap
+          lipo -create \
+            target/aarch64-apple-ios-sim/release/libsc_chat_ffi.a \
+            target/x86_64-apple-ios/release/libsc_chat_ffi.a \
+            -output target/simulator/libsc_chat_ffi.a
+          xcodebuild -create-xcframework \
+            -library target/aarch64-apple-ios/release/libsc_chat_ffi.a -headers target/headers \
+            -library target/simulator/libsc_chat_ffi.a -headers target/headers \
+            -output "$PACKAGE/ScChatFFI.xcframework"
+          cp target/swift/ScChat.swift "$PACKAGE/Sources/ScChat/"
+          cp "$CRATE/ios/Package.swift" "$PACKAGE/"
+
+      - name: Swift package builds for iOS
+        working-directory: ${{ env.PACKAGE }}
+        run: xcodebuild build -scheme ScChat -destination "generic/platform=iOS Simulator" -quiet
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sc-chat-ios
+          path: |
+            ${{ env.PACKAGE }}/Package.swift
+            ${{ env.PACKAGE }}/Sources
+            ${{ env.PACKAGE }}/ScChatFFI.xcframework
+          if-no-files-found: error

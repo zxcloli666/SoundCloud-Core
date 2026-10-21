@@ -19,10 +19,6 @@ serde_json = "1"
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "1"
-uniffi = { version = "0.32", optional = true }
-
-[features]
-ffi = ["dep:uniffi"]
 
 [dev-dependencies]
 sc-chat-wire = { path = "../sc-chat-wire", features = ["vectors"] }

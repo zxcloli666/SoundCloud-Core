@@ -7,7 +7,8 @@ A crate lives here only if it is platform neutral: it builds for Windows, Linux,
 | Crate | What it is |
 |---|---|
 | [`sc-chat-wire`](crates/sc-chat-wire) | chat wire format and crypto, the protocol spec and the test vectors |
-| [`sc-chat`](crates/sc-chat) | chat client core: sealed channel, store, sync, outbox, search; UniFFI behind the `ffi` feature |
+| [`sc-chat`](crates/sc-chat) | chat client core: sealed channel, store, sync, outbox, search |
+| [`sc-chat-ffi`](crates/sc-chat-ffi) | UniFFI wrapper of `sc-chat`: an AAR for Android and an XCFramework for iOS, see [docs/chat-mobile.md](docs/chat-mobile.md) |
 
 Apps pin a crate by its tag, `<crate>-v<version>`:
 
@@ -23,7 +24,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
 ```
 
-CI runs the tests on Linux, macOS and Windows and `cargo check` for Android (`aarch64`, `armv7`, `x86_64`) and iOS (device and simulator).
+CI runs the tests on Linux, macOS and Windows and `cargo check` for Android (`aarch64`, `armv7`, `x86_64`) and iOS (device and simulator). `chat-mobile.yml` builds the Android AAR and the iOS XCFramework and keeps them as run artifacts.
 
 The chat integration tests need the Backend dev stack from `scripts/chat-it.sh`, see [crates/sc-chat/tests/integration](crates/sc-chat/tests/integration/README.md).
 
