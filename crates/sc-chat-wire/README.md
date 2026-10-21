@@ -192,4 +192,4 @@ Body kind to class:
 | `ck.json` | CK wrap under a KEK and CK seal to a device |
 | `msg.json` | padded envelopes and message bodies for a text, a reaction, group meta and group meta under nil ids |
 
-The keys in the vectors are test keys, never the pinned ones. `cargo test` replays every file (`tests/vectors.rs`).
+The keys in the vectors are test keys, never the pinned ones. `cargo test` replays every file (`tests/vectors.rs`). The `vectors` feature gives Rust tests the same files as `sc_chat_wire::vectors`.

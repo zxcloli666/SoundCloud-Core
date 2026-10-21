@@ -25,4 +25,5 @@ uniffi = { version = "0.32", optional = true }
 ffi = ["dep:uniffi"]
 
 [dev-dependencies]
+sc-chat-wire = { path = "../sc-chat-wire", features = ["vectors"] }
 tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util"] }

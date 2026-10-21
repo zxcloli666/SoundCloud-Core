@@ -8,6 +8,8 @@ pub mod proto;
 mod random;
 pub mod seal;
 pub mod sign;
+#[cfg(feature = "vectors")]
+pub mod vectors;
 
 pub use error::WireError;
 pub use prost;

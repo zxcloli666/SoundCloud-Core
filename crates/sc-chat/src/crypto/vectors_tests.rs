@@ -3,6 +3,7 @@ use std::sync::Arc;
 use sc_chat_wire::msg::encode_padded;
 use sc_chat_wire::prost::Message;
 use sc_chat_wire::proto::{Bind, Envelope};
+use sc_chat_wire::vectors::{BIND, CK, MSG, REQUEST};
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -14,11 +15,6 @@ use crate::contracts::{
 };
 use crate::envelope::{self, Content, decode, encode};
 use crate::login::seal_bound;
-
-const REQUEST: &str = include_str!("../../../sc-chat-wire/vectors/request.json");
-const BIND: &str = include_str!("../../../sc-chat-wire/vectors/bind.json");
-const CK: &str = include_str!("../../../sc-chat-wire/vectors/ck.json");
-const MSG: &str = include_str!("../../../sc-chat-wire/vectors/msg.json");
 
 struct At(Millis);
 

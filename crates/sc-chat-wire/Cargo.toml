@@ -16,6 +16,9 @@ prost = "0.13"
 sha2 = "0.10"
 thiserror = "2"
 
+[features]
+vectors = []
+
 [build-dependencies]
 prost-build = "0.13"
 protox = "0.8"
