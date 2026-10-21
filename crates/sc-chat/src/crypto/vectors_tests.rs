@@ -272,7 +272,10 @@ fn every_message_vector_decodes_and_encodes_back_to_its_plaintext() {
 
 #[test]
 fn the_text_and_reaction_vectors_open_as_their_class_and_target() {
-    for case in cases(MSG).into_iter().filter(|case| case["name"] != "meta") {
+    for case in cases(MSG)
+        .into_iter()
+        .filter(|case| case["class"] != "meta")
+    {
         let ck = Ck::from_bytes(array(&case["ck"]));
         let at = message_at(&case);
         let body = hex(&case["body"]);
