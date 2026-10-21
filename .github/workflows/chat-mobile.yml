@@ -84,7 +84,8 @@ jobs:
     runs-on: macos-latest
     env:
       IPHONEOS_DEPLOYMENT_TARGET: "15.0"
-      PACKAGE: target/ScChat
+      STAGE: ios-out
+      PACKAGE: ios-out/ScChat
     steps:
       - uses: actions/checkout@v7
 
@@ -106,22 +107,22 @@ jobs:
         run: >
           cargo run -p sc-chat-ffi --features bindgen --release --locked --bin uniffi-bindgen --
           generate --library target/aarch64-apple-ios/release/libsc_chat_ffi.a
-          --language swift --no-format --out-dir target/swift
+          --language swift --no-format --out-dir "$STAGE/swift"
 
       - name: XCFramework
         run: |
-          mkdir -p target/headers target/simulator "$PACKAGE/Sources/ScChat"
-          cp target/swift/ScChatFFI.h target/headers/
-          cp target/swift/ScChatFFI.modulemap target/headers/module.modulemap
+          mkdir -p "$STAGE/headers" "$STAGE/simulator" "$PACKAGE/Sources/ScChat"
+          cp "$STAGE/swift/ScChatFFI.h" "$STAGE/headers/"
+          cp "$STAGE/swift/ScChatFFI.modulemap" "$STAGE/headers/module.modulemap"
           lipo -create \
             target/aarch64-apple-ios-sim/release/libsc_chat_ffi.a \
             target/x86_64-apple-ios/release/libsc_chat_ffi.a \
-            -output target/simulator/libsc_chat_ffi.a
+            -output "$STAGE/simulator/libsc_chat_ffi.a"
           xcodebuild -create-xcframework \
-            -library target/aarch64-apple-ios/release/libsc_chat_ffi.a -headers target/headers \
-            -library target/simulator/libsc_chat_ffi.a -headers target/headers \
+            -library target/aarch64-apple-ios/release/libsc_chat_ffi.a -headers "$STAGE/headers" \
+            -library "$STAGE/simulator/libsc_chat_ffi.a" -headers "$STAGE/headers" \
             -output "$PACKAGE/ScChatFFI.xcframework"
-          cp target/swift/ScChat.swift "$PACKAGE/Sources/ScChat/"
+          cp "$STAGE/swift/ScChat.swift" "$PACKAGE/Sources/ScChat/"
           cp "$CRATE/ios/Package.swift" "$PACKAGE/"
 
       - name: Swift package builds for iOS
