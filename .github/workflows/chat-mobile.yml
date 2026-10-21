@@ -2,7 +2,7 @@ name: Chat mobile
 
 on:
   push:
-    branches: [main]
+    branches: [main, probe/mobile-ffi]
     tags: ["sc-chat-ffi-v*"]
     paths:
       - "crates/**"
@@ -10,7 +10,7 @@ on:
       - "Cargo.lock"
       - ".github/workflows/chat-mobile.yml"
   pull_request:
-    branches: [main]
+    branches: [main, probe/mobile-ffi]
     paths:
       - "crates/**"
       - "Cargo.toml"
