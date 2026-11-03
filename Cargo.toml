@@ -6,3 +6,24 @@ resolver = "3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/zxcloli666/SoundCloud-Core"
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.image-webp]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.libwebp-sys]
+opt-level = 3

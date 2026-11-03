@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-pub const VERSION: i64 = 2;
+pub const VERSION: i64 = 3;
 
 const V1: &str = "
 CREATE TABLE meta (
@@ -138,7 +138,31 @@ CREATE TABLE hidden_messages (
 ) WITHOUT ROWID;
 ";
 
-const STEPS: [&str; 2] = [V1, V2];
+const V3: &str = "
+CREATE TABLE media_uploads (
+    id BLOB PRIMARY KEY,
+    album BLOB NOT NULL,
+    position INTEGER NOT NULL,
+    image_ref TEXT NOT NULL,
+    thumb_ref TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'reserved', 'uploading', 'uploaded', 'committed', 'failed')),
+    object TEXT NOT NULL DEFAULT 'image' CHECK (object IN ('image', 'thumb')),
+    reserve_id TEXT,
+    stage_id TEXT,
+    parts_sent INTEGER NOT NULL DEFAULT 0,
+    presign_expires_at INTEGER,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    nonce BLOB NOT NULL,
+    attachment BLOB NOT NULL
+) WITHOUT ROWID;
+
+CREATE INDEX media_uploads_album ON media_uploads (album, position);
+CREATE INDEX media_uploads_open ON media_uploads (created_at, position) WHERE state NOT IN ('committed', 'failed');
+";
+
+const STEPS: [&str; 3] = [V1, V2, V3];
 
 pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "secure_delete", "ON")?;

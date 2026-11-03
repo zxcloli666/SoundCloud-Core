@@ -5,6 +5,7 @@ pub mod crypto;
 pub mod embeds;
 pub mod envelope;
 pub mod login;
+pub mod media;
 pub mod outbox;
 pub mod search;
 pub mod store;

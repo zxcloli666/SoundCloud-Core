@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 use super::{V1, VERSION, migrate, prepare, version};
 
-const TABLES: [&str; 12] = [
+const TABLES: [&str; 13] = [
     "meta",
     "users",
     "conversations",
@@ -15,6 +15,7 @@ const TABLES: [&str; 12] = [
     "drafts",
     "outbox",
     "hidden_messages",
+    "media_uploads",
 ];
 
 fn fresh() -> Connection {

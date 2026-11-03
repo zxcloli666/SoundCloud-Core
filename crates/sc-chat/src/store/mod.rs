@@ -9,6 +9,7 @@ pub mod expiry;
 mod history;
 mod items;
 mod local;
+mod media;
 pub(crate) mod messages;
 pub(crate) mod meta;
 pub mod migrations;
@@ -33,6 +34,7 @@ use crate::contracts::{
 };
 
 pub use expiry::ExpiryTimer;
+pub use media::{MediaUpload, NewUpload, Reserved, UploadObject, UploadState};
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";
