@@ -16,7 +16,13 @@ pub struct PreparedImage {
 }
 
 pub fn prepare_image(bytes: &[u8]) -> Result<PreparedImage, MediaError> {
-    let base = fit_side(&source::decode(bytes)?, IMAGE_SIDE);
+    let (decoded, profile) = source::decode(bytes)?;
+    let scaled = fit_side(&decoded, IMAGE_SIDE);
+    drop(decoded);
+    let base = match profile {
+        Some(profile) => source::to_srgb(scaled, &profile),
+        None => scaled,
+    };
     let image = encode(&base, &ladder::IMAGE)?;
     let thumb = encode(&base, &ladder::THUMB)?;
     let image_blob = seal_blob(Role::Image, &image.webp)?;

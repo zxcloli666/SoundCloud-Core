@@ -10,7 +10,7 @@ const HEIF_BRANDS: [&[u8]; 8] = [
     b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1",
 ];
 
-pub(super) fn decode(bytes: &[u8]) -> Result<DynamicImage, MediaError> {
+pub(super) fn decode(bytes: &[u8]) -> Result<(DynamicImage, Option<Vec<u8>>), MediaError> {
     if bytes.len() > SOURCE_MAX_BYTES {
         return Err(MediaError::TooLarge);
     }
@@ -35,14 +35,10 @@ pub(super) fn decode(bytes: &[u8]) -> Result<DynamicImage, MediaError> {
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
     let mut image = DynamicImage::from_decoder(decoder).map_err(|_| MediaError::Malformed)?;
     image.apply_orientation(orientation);
-    let image = flatten(image);
-    Ok(match icc {
-        Some(profile) => to_srgb(image, &profile),
-        None => image,
-    })
+    Ok((flatten(image), icc))
 }
 
-fn to_srgb(image: DynamicImage, profile: &[u8]) -> DynamicImage {
+pub(super) fn to_srgb(image: DynamicImage, profile: &[u8]) -> DynamicImage {
     let Some(input) = Profile::new_from_slice(profile, false) else {
         return image;
     };
