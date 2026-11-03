@@ -68,7 +68,7 @@ impl<L: Local> SyncEngine<L> {
         };
         let body = self.cipher.seal_message(&ck, &at, &envelope)?;
         let media = match item.class {
-            MessageClass::Post => post_media(&envelope.attachments)?,
+            MessageClass::Post | MessageClass::Meta => post_media(&envelope.attachments)?,
             _ => Vec::new(),
         };
         let message = SendMessage {

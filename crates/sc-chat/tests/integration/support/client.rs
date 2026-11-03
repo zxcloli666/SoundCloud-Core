@@ -194,6 +194,7 @@ impl Client {
             },
             mentions: Vec::new(),
             embeds: Vec::new(),
+            attachments: Vec::new(),
             reply_to: None,
             forwarded_from: None,
         });

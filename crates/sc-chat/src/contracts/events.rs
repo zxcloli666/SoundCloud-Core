@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::conversation::ConversationSummary;
 use super::device::Device;
 use super::ids::{ConvId, UserId};
+use super::media::MediaUploadsEvent;
 use super::message::{GoneMessage, Message, PeerMark};
 use super::status::ChatStatus;
 
@@ -66,4 +67,5 @@ pub enum CoreEvent {
     Typing(TypingEvent),
     Gone(GoneEvent),
     DeviceAdded(DeviceAddedEvent),
+    MediaUploads(MediaUploadsEvent),
 }

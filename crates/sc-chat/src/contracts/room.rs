@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::conversation::UserRef;
 use super::embed::Embed;
 use super::ids::UserId;
-use super::present::present;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,4 +60,12 @@ pub struct RoomSettingsPatch {
     pub cover: Option<Option<RoomCover>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub room_images: Option<RoomImages>,
+}
+
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }

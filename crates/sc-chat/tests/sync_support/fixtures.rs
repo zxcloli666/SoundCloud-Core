@@ -160,6 +160,7 @@ pub fn summary(id: ConvId, last_seq: i64) -> ConversationSummary {
         kind: ConversationKind::Direct,
         title: None,
         avatar_url: None,
+        avatar_media_id: None,
         peer: None,
         role: MemberRole::Member,
         state: MemberState::Active,

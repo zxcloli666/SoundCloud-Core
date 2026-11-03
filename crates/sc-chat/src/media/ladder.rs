@@ -23,6 +23,12 @@ pub(super) const IMAGE: Ladder = Ladder {
     cap: super::IMAGE_CAP,
 };
 
+pub(super) const AVATAR: Ladder = Ladder {
+    sides: &[512, 384, 256],
+    qualities: &[70.0, 60.0, 50.0, 40.0],
+    cap: super::AVATAR_SERVER_CAP,
+};
+
 pub(super) const THUMB: Ladder = Ladder {
     sides: &[320, 256, 192, 128],
     qualities: &[45.0, 35.0, 25.0, 15.0],

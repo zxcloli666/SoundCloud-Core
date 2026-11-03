@@ -56,6 +56,50 @@ pub fn track(title: &str) -> proto::Embed {
     }
 }
 
+pub fn image(n: u128) -> proto::Attachment {
+    proto::Attachment {
+        media_id: Uuid::from_u128(n).to_string(),
+        kind: proto::AttachmentKind::Image as i32,
+        mime: "image/webp".into(),
+        size: 1_000,
+        w: 640,
+        h: 480,
+        thumbhash: vec![1, 2, 3],
+        key: vec![7; 32],
+        nonce: vec![8; 24],
+        sha256_plain: vec![1; 32],
+        sha256_cipher: vec![2; 32],
+        thumb: Some(proto::Thumb {
+            media_id: Uuid::from_u128(n + 1_000).to_string(),
+            key: vec![9; 32],
+            nonce: vec![6; 24],
+            size: 100,
+            w: 320,
+            h: 240,
+        }),
+    }
+}
+
+pub fn avatar(n: u128) -> proto::Attachment {
+    proto::Attachment {
+        thumb: None,
+        ..image(n)
+    }
+}
+
+pub fn album(conversation_id: ConvId, seq: Seq, body: &str, ids: &[u128]) -> StoredMessage {
+    let mut envelope = envelope(Body::Text(text(body)));
+    envelope.attachments = ids.iter().copied().map(image).collect();
+    row(
+        conversation_id,
+        seq,
+        PEER,
+        MessageClass::Post,
+        None,
+        open(&envelope),
+    )
+}
+
 pub fn row(
     conversation_id: ConvId,
     seq: Seq,
@@ -161,6 +205,7 @@ pub fn summary(id: ConvId, kind: ConversationKind) -> ConversationSummary {
         kind,
         title: Some("Group".into()),
         avatar_url: None,
+        avatar_media_id: None,
         peer: None,
         role: MemberRole::Member,
         state: MemberState::Active,

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use sc_chat::ChatError;
 use sc_chat::media::prepare_image;
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject, UploadState};
+use sc_chat::{ChatError, MediaKind};
 use uuid::Uuid;
 
 use crate::support::*;
@@ -18,8 +18,9 @@ fn upload(album: Uuid, position: u32) -> NewUpload {
         album,
         position,
         conversation_id: CONVERSATION,
+        kind: MediaKind::Image,
         image_ref: format!("media/{album}/{position}.img"),
-        thumb_ref: format!("media/{album}/{position}.thumb"),
+        thumb_ref: Some(format!("media/{album}/{position}.thumb")),
         attachment: prepared.attachment,
     }
 }
@@ -27,7 +28,7 @@ fn upload(album: Uuid, position: u32) -> NewUpload {
 fn reserved() -> Reserved {
     Reserved {
         media_id: IMAGE_ID,
-        thumb_media_id: THUMB_ID,
+        thumb_media_id: Some(THUMB_ID),
         presign_expires_at: 10_000,
     }
 }
@@ -161,7 +162,7 @@ fn a_fresh_presign_for_the_same_ids_keeps_the_progress() {
 
     let other = Reserved {
         media_id: Uuid::from_u128(0x2a),
-        thumb_media_id: Uuid::from_u128(0x2b),
+        thumb_media_id: Some(Uuid::from_u128(0x2b)),
         presign_expires_at: 95_000,
     };
     store.upload_reserved(id, &other, 6).unwrap();
@@ -173,7 +174,7 @@ fn a_fresh_presign_for_the_same_ids_keeps_the_progress() {
     assert_eq!(reset.media_id, Some(other.media_id));
     assert_eq!(
         reset.attachment.thumb.unwrap().media_id,
-        other.thumb_media_id.to_string()
+        other.thumb_media_id.unwrap().to_string()
     );
 }
 

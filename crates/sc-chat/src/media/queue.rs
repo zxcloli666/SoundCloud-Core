@@ -2,10 +2,8 @@ use uuid::Uuid;
 
 use super::URLS_MAX;
 use crate::api::Api;
-use crate::api::wire::{
-    CommitAnswer, MediaKind, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest,
-};
-use crate::contracts::{ChatError, ChatResult, ConvId, Millis};
+use crate::api::wire::{CommitAnswer, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest};
+use crate::contracts::{ChatError, ChatResult, ConvId, MediaKind, Millis};
 use crate::store::{MediaUpload, Reserved, Store, UploadObject};
 
 pub const PRESIGN_MARGIN_MS: Millis = 60_000;
@@ -14,35 +12,47 @@ pub const PRESIGN_MARGIN_MS: Millis = 60_000;
 pub struct PutTargets {
     pub expires_at: Millis,
     pub image: PresignedPut,
-    pub thumb: PresignedPut,
+    pub thumb: Option<PresignedPut>,
 }
 
 pub async fn reserve(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResult<PutTargets> {
     let upload = store.upload(id)?.ok_or(ChatError::NotFound)?;
     let answer = api.reserve_media(&reserve_request(&upload)?).await?;
-    let thumb = answer.thumb.ok_or(ChatError::Protocol)?;
+    if (upload.kind == MediaKind::Image) != answer.thumb.is_some() {
+        return Err(ChatError::Protocol);
+    }
     let expires_at = now.saturating_add(i64::from(answer.expires_in_s) * 1_000 - PRESIGN_MARGIN_MS);
     let reserved = Reserved {
         media_id: answer.id,
-        thumb_media_id: thumb.id,
+        thumb_media_id: answer.thumb.as_ref().map(|thumb| thumb.id),
         presign_expires_at: expires_at,
     };
     store.upload_reserved(id, &reserved, now)?;
     Ok(PutTargets {
         expires_at,
         image: answer.put,
-        thumb: thumb.put,
+        thumb: answer.thumb.map(|thumb| thumb.put),
     })
 }
 
 pub fn reserve_request(upload: &MediaUpload) -> ChatResult<ReserveMedia> {
-    let thumb = upload.attachment.thumb.as_ref().ok_or(ChatError::Invalid)?;
+    let thumb_bytes = match upload.kind {
+        MediaKind::Image => Some(
+            upload
+                .attachment
+                .thumb
+                .as_ref()
+                .ok_or(ChatError::Invalid)?
+                .size,
+        ),
+        MediaKind::Avatar => None,
+    };
     Ok(ReserveMedia {
         upload_id: upload.id,
         conversation_id: upload.conversation_id,
-        kind: MediaKind::Image,
+        kind: upload.kind,
         bytes: upload.attachment.size,
-        thumb_bytes: Some(thumb.size),
+        thumb_bytes,
     })
 }
 
@@ -55,7 +65,8 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
             Ok(answer)
         }
         Err(ChatError::MediaMissing { ids }) => {
-            let only_thumb = !ids.is_empty() && !ids.contains(&media_id);
+            let only_thumb =
+                upload.kind == MediaKind::Image && !ids.is_empty() && !ids.contains(&media_id);
             let object = if only_thumb {
                 UploadObject::Thumb
             } else {

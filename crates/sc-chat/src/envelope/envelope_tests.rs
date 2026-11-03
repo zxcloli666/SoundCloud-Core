@@ -50,6 +50,7 @@ fn post(text: RichText) -> Post {
         reply_to: None,
         mentions: Vec::new(),
         embeds: Vec::new(),
+        attachments: Vec::new(),
         forwarded_from: None,
     }
 }
@@ -97,6 +98,7 @@ fn every_kind_of_content_survives_a_round_trip() {
             reply_to: Some(5),
             mentions: vec!["42".into()],
             embeds: vec![track("soundcloud:tracks:1"), playlist, invite],
+            attachments: Vec::new(),
             forwarded_from: Some(Forwarded {
                 user_id: "9".into(),
                 name: "Max".into(),
@@ -116,7 +118,7 @@ fn every_kind_of_content_survives_a_round_trip() {
         Content::Meta(ConversationMeta {
             title: "Ночная смена".into(),
             description: String::new(),
-            avatar_media_id: Some("m1".into()),
+            avatar: None,
         }),
         Content::Pin {
             target: 6,
@@ -410,7 +412,7 @@ fn a_meta_message_opens_as_the_conversation_meta() {
     let meta = Content::Meta(ConversationMeta {
         title: "Ночная смена".into(),
         description: "треки после полуночи".into(),
-        avatar_media_id: None,
+        avatar: None,
     });
     let meta_at = at(MessageClass::Meta);
     let body = seal(&ck, &meta_at, &meta).unwrap();

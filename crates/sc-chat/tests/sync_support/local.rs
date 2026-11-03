@@ -9,9 +9,9 @@ use sc_chat::sc_chat_wire::proto::{Envelope, envelope::Body};
 use sc_chat::store::{StoredContent, StoredMessage, SyncState};
 use sc_chat::sync::Local;
 use sc_chat::{
-    ChatResult, ClientId, ConvId, ConversationSummary, DeliveryState, GoneMessage, HistoryPage,
-    HistoryQuery, Message, MessageBody, MessageClass, Millis, PeerMark, RichText, Seq, UserId,
-    UserRef,
+    ChatResult, ClientId, ConvId, ConversationMeta, ConversationSummary, DeliveryState,
+    GoneMessage, HistoryPage, HistoryQuery, Message, MessageBody, MessageClass, Millis, PeerMark,
+    RichText, Seq, UserId, UserRef,
 };
 
 #[derive(Default)]
@@ -24,6 +24,7 @@ struct Data {
     keys: HashMap<(ConvId, u32), [u8; 32]>,
     outbox: Vec<(OutboxItem, bool)>,
     kept_above: Vec<(ConvId, Seq)>,
+    group_meta: HashMap<ConvId, ConversationMeta>,
 }
 
 pub struct MemoryLocal {
@@ -72,6 +73,10 @@ impl MemoryLocal {
         self.data.lock().unwrap().kept_above.clone()
     }
 
+    pub fn group_meta(&self, id: ConvId) -> Option<ConversationMeta> {
+        self.data.lock().unwrap().group_meta.get(&id).cloned()
+    }
+
     pub fn marks_of(&self, id: ConvId) -> Vec<PeerMark> {
         self.data
             .lock()
@@ -118,6 +123,7 @@ impl MemoryLocal {
             mentions: Vec::new(),
             mentions_me: false,
             embeds,
+            attachments: Vec::new(),
             forwarded_from: None,
             reactions: Vec::new(),
             pinned: false,
@@ -146,6 +152,7 @@ impl MemoryLocal {
             mentions: Vec::new(),
             mentions_me: false,
             embeds: Vec::new(),
+            attachments: Vec::new(),
             forwarded_from: None,
             reactions: Vec::new(),
             pinned: false,
@@ -188,6 +195,15 @@ impl Local for MemoryLocal {
         for item in items {
             data.conversations.insert(item.id, item.clone());
         }
+        Ok(())
+    }
+
+    fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()> {
+        self.data
+            .lock()
+            .unwrap()
+            .group_meta
+            .insert(id, meta.clone());
         Ok(())
     }
 

@@ -63,7 +63,7 @@ impl Chat {
             let meta = ConversationMeta {
                 title,
                 description: String::new(),
-                avatar_media_id: None,
+                avatar: None,
             };
             self.queue(view.id, None, Content::Meta(meta)).await?;
         }

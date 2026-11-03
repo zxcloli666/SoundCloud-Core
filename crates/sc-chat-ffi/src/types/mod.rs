@@ -5,6 +5,7 @@ mod error;
 mod events;
 mod ids;
 mod login;
+mod media;
 mod message;
 mod platform;
 mod safety;

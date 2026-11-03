@@ -1,8 +1,8 @@
 use rusqlite::Connection;
 
-use super::{V1, VERSION, migrate, prepare, version};
+use super::{V1, V2, V3, VERSION, migrate, prepare, version};
 
-const TABLES: [&str; 13] = [
+const TABLES: [&str; 15] = [
     "meta",
     "users",
     "conversations",
@@ -16,6 +16,8 @@ const TABLES: [&str; 13] = [
     "outbox",
     "hidden_messages",
     "media_uploads",
+    "message_media",
+    "group_meta",
 ];
 
 fn fresh() -> Connection {
@@ -108,4 +110,44 @@ fn a_v1_store_moves_to_v2_and_keeps_its_rows() {
         [],
     )
     .unwrap();
+}
+
+#[test]
+fn a_v3_upload_queue_moves_to_v4_as_images() {
+    let conn = Connection::open_in_memory().unwrap();
+    prepare(&conn).unwrap();
+    for step in [V1, V2, V3] {
+        conn.execute_batch(step).unwrap();
+    }
+    conn.pragma_update(None, "user_version", 3).unwrap();
+    conn.execute(
+        "INSERT INTO media_uploads (id, album, position, conversation_id, image_ref, thumb_ref, state, created_at, updated_at, nonce, attachment) VALUES (x'01', x'02', 0, x'03', 'a.img', 'a.thumb', 'uploading', 1, 2, x'04', x'05')",
+        [],
+    )
+    .unwrap();
+    migrate(&conn).unwrap();
+    assert_eq!(version(&conn).unwrap(), VERSION);
+    let kept: (String, String, Option<String>) = conn
+        .query_row(
+            "SELECT kind, state, thumb_ref FROM media_uploads WHERE id = x'01'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        kept,
+        ("image".into(), "uploading".into(), Some("a.thumb".into()))
+    );
+    conn.execute(
+        "INSERT INTO media_uploads (id, album, position, conversation_id, kind, image_ref, created_at, updated_at, nonce, attachment) VALUES (x'11', x'12', 0, x'03', 'avatar', 'b.img', 1, 1, x'04', x'05')",
+        [],
+    )
+    .unwrap();
+    assert!(
+        conn.execute(
+            "INSERT INTO media_uploads (id, album, position, conversation_id, kind, image_ref, created_at, updated_at, nonce, attachment) VALUES (x'21', x'22', 0, x'03', 'thumb', 'c.img', 1, 1, x'04', x'05')",
+            [],
+        )
+        .is_err()
+    );
 }

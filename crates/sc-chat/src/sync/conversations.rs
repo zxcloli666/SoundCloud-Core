@@ -1,16 +1,22 @@
-use sc_chat_wire::proto::envelope::Body;
+use uuid::Uuid;
 
 use super::local::Local;
 use super::summary::{self, Facts};
 use super::{SyncEngine, fatal, system, transient};
 use crate::api::wire::{CardView, ConversationView, MessageView, SyncConversation};
 use crate::contracts::{
-    ChatError, ChatResult, ConvId, ConversationKind, ConversationSummary, CoreEvent, HistoryQuery,
-    Seq, SyncEvent, SystemKind, UserId, UserRef,
+    ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta, ConversationSummary,
+    CoreEvent, HistoryQuery, Seq, SyncEvent, SystemKind, UserId, UserRef,
 };
 use crate::embeds::clean;
+use crate::envelope::{self, Content};
 
 pub const RENDER_MAX: u32 = 200;
+
+fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
+    let avatar = meta.avatar.as_ref()?;
+    Uuid::parse_str(&avatar.media_id).ok()
+}
 
 fn structural(message: &MessageView) -> bool {
     match (message.class.as_str(), &message.body) {
@@ -83,7 +89,10 @@ impl<L: Local> SyncEngine<L> {
         view: &ConversationView,
         existing: Option<&ConversationSummary>,
     ) -> ChatResult<ConversationSummary> {
-        let title = self.meta_title(view).await?;
+        let meta = self.meta_of(view).await?;
+        if let Some(meta) = &meta {
+            self.store.put_group_meta(view.id, meta)?;
+        }
         let peer = match &view.peer {
             Some(peer) => Some(self.user_ref(peer).await?),
             None => None,
@@ -95,7 +104,10 @@ impl<L: Local> SyncEngine<L> {
                     .is_some_and(|created| view.created_at < created)
         });
         let facts = Facts {
-            title,
+            title: meta
+                .as_ref()
+                .and_then(|meta| clean::optional_text(Some(&meta.title), clean::TEXT_MAX)),
+            avatar_media_id: meta.as_ref().map(avatar_id),
             peer,
             history_locked,
         };
@@ -108,7 +120,7 @@ impl<L: Local> SyncEngine<L> {
         }
     }
 
-    async fn meta_title(&self, view: &ConversationView) -> ChatResult<Option<String>> {
+    async fn meta_of(&self, view: &ConversationView) -> ChatResult<Option<ConversationMeta>> {
         let (Some(meta_ct), Some(epoch)) = (&view.meta_ct, view.meta_epoch) else {
             return Ok(None);
         };
@@ -121,8 +133,8 @@ impl<L: Local> SyncEngine<L> {
         let Ok(envelope) = self.cipher.open_meta(&ck, view.id, epoch, meta_ct) else {
             return Ok(None);
         };
-        Ok(match envelope.body {
-            Some(Body::Meta(meta)) => clean::optional_text(Some(&meta.title), clean::TEXT_MAX),
+        Ok(match envelope::decode(&envelope) {
+            Ok(Content::Meta(meta)) => Some(meta),
             _ => None,
         })
     }

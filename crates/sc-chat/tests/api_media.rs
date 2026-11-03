@@ -51,8 +51,9 @@ fn queued(store: &Store) -> Uuid {
         album: Uuid::new_v4(),
         position: 0,
         conversation_id: CONVERSATION,
+        kind: MediaKind::Image,
         image_ref: "media/a/0.img".into(),
-        thumb_ref: "media/a/0.thumb".into(),
+        thumb_ref: Some("media/a/0.thumb".into()),
         attachment,
     };
     store.enqueue_upload(&upload, START_MS).unwrap()
@@ -267,7 +268,7 @@ async fn the_queue_reserves_commits_and_keeps_its_ids_across_a_fresh_presign() {
 
     let targets = queue::reserve(api, &store, id, START_MS).await.unwrap();
     assert_eq!(targets.expires_at, START_MS + 600_000 - PRESIGN_MARGIN_MS);
-    assert_eq!(targets.thumb.headers["content-length"], "24576");
+    assert_eq!(targets.thumb.unwrap().headers["content-length"], "24576");
     let sent = &rig.server.calls_to("POST", "/chat/media/reserve")[0].body;
     assert_eq!(
         (&sent["upload_id"], &sent["bytes"], &sent["thumb_bytes"]),

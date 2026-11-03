@@ -11,7 +11,7 @@ mod worker;
 pub use cipher::{BLOCK, Blob, Role, open_blob, seal_blob, sealed_len};
 pub use error::MediaError;
 pub use open::{OpenedImage, open_image, open_thumb};
-pub use prepare::{PreparedImage, prepare_image};
+pub use prepare::{PreparedAvatar, PreparedImage, prepare_avatar, prepare_image};
 pub use refs::{image_id, post_media, thumb_id};
 pub use worker::{DECODE_THREADS, DECODE_TIMEOUT, MediaWorker};
 
@@ -22,6 +22,7 @@ pub const THUMB_SIDE: u32 = 320;
 pub const THUMB_QUALITY: f32 = 45.0;
 pub const THUMB_CAP: usize = 24 * 1024;
 pub const THUMB_SERVER_CAP: usize = 32 * 1024;
+pub const AVATAR_SIDE: u32 = 512;
 pub const AVATAR_SERVER_CAP: usize = 64 * 1024;
 pub const ALBUM_MAX: usize = 10;
 pub const ROOM_ALBUM_MAX: usize = 4;

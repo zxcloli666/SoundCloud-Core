@@ -18,12 +18,14 @@ impl Chat {
                     .into_iter()
                     .take(EMBEDS_MAX)
                     .collect(),
+                attachments: Vec::new(),
                 text: input.text,
                 reply_to: input.reply_to,
                 forwarded_from: None,
             },
         };
-        if post.text.text.trim().is_empty() && post.embeds.is_empty() {
+        if post.text.text.trim().is_empty() && post.embeds.is_empty() && post.attachments.is_empty()
+        {
             return Err(ChatError::Invalid);
         }
         if post.text.text.encode_utf16().count() > TEXT_MAX {
@@ -88,6 +90,15 @@ fn forward_of(core: &Core, source: MessageRef) -> ChatResult<Post> {
     let MessageBody::Text(text) = message.body else {
         return Err(ChatError::Invalid);
     };
+    let attachments = message
+        .attachments
+        .iter()
+        .map(|attachment| {
+            core.store
+                .attachment(source.conversation_id, attachment.media_id)?
+                .ok_or(ChatError::NotFound)
+        })
+        .collect::<ChatResult<Vec<_>>>()?;
     let author = core.store.users(std::slice::from_ref(&message.sender))?;
     let forwarded_from = message.forwarded_from.unwrap_or_else(|| Forwarded {
         name: author
@@ -99,6 +110,7 @@ fn forward_of(core: &Core, source: MessageRef) -> ChatResult<Post> {
     Ok(Post {
         mentions: Vec::new(),
         embeds: message.embeds,
+        attachments,
         text,
         reply_to: None,
         forwarded_from: Some(forwarded_from),

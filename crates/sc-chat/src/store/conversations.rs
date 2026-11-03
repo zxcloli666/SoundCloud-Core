@@ -1,5 +1,6 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::codec::{Label, from_json, label, to_json, uuid_at};
 use super::project::Context;
@@ -23,6 +24,8 @@ const ORDER: &str = "ORDER BY pinned_at IS NULL, pinned_at DESC, last_at DESC, i
 struct Sealed {
     title: Option<String>,
     avatar_url: Option<String>,
+    #[serde(default)]
+    avatar_media_id: Option<Uuid>,
     preview: Option<MessagePreview>,
 }
 
@@ -43,6 +46,7 @@ impl Store {
             let sealed = Sealed {
                 title: item.title.clone(),
                 avatar_url: item.avatar_url.clone(),
+                avatar_media_id: item.avatar_media_id,
                 preview: item.preview.clone(),
             };
             let sealed = seal::seal(&self.keys.body, &aad(item.id), &to_json(&sealed)?)?;
@@ -206,6 +210,7 @@ fn head(row: &Row<'_>) -> rusqlite::Result<Head> {
             has_draft: row.get(21)?,
             title: None,
             avatar_url: None,
+            avatar_media_id: None,
             peer: None,
             preview: None,
         },
@@ -228,6 +233,7 @@ fn summary(conn: &Connection, keys: &StoreKeys, head: Head) -> ChatResult<Conver
     };
     summary.title = sealed.title;
     summary.avatar_url = sealed.avatar_url;
+    summary.avatar_media_id = sealed.avatar_media_id;
     summary.peer = match head.peer {
         Some(peer) => people::user(conn, keys, &peer)?,
         None => None,
@@ -251,6 +257,7 @@ pub fn preview(message: &Message) -> MessagePreview {
         ),
         MessageBody::Text(_) => match message.embeds.first() {
             Some(embed) => (PreviewKind::Embed, embed.title.clone()),
+            None if !message.attachments.is_empty() => (PreviewKind::Image, String::new()),
             None => (PreviewKind::Text, String::new()),
         },
         MessageBody::System(event) if event.kind == SystemKind::Deleted => {

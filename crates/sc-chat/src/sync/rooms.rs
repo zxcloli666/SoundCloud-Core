@@ -94,6 +94,7 @@ fn seated(id: ConvId, code: &str, from_seq: Seq, now: Millis) -> ConversationSum
         kind: ConversationKind::Room,
         title: None,
         avatar_url: None,
+        avatar_media_id: None,
         peer: None,
         role: MemberRole::Member,
         state: MemberState::Active,

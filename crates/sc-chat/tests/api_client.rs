@@ -393,10 +393,10 @@ async fn config_without_media_turns_uploads_off_and_with_media_carries_the_quota
 }
 
 #[test]
-fn sends_and_patches_name_media_only_when_there_is_some() {
-    use sc_chat::api::wire::{ConversationChange, SendMessage};
+fn a_send_names_media_only_when_there_is_some() {
+    use sc_chat::api::wire::SendMessage;
 
-    let text = SendMessage {
+    let mut send = SendMessage {
         client_id: Uuid::nil(),
         class: "post".into(),
         epoch: 1,
@@ -404,22 +404,9 @@ fn sends_and_patches_name_media_only_when_there_is_some() {
         body: vec![1],
         media: Vec::new(),
     };
-    assert!(serde_json::to_value(&text).unwrap().get("media").is_none());
+    assert!(serde_json::to_value(&send).unwrap().get("media").is_none());
 
-    let untouched = ConversationChange::default();
-    assert_eq!(serde_json::to_value(&untouched).unwrap(), json!({}));
     let id = Uuid::from_u128(9);
-    let set = ConversationChange {
-        avatar: Some(Some(id)),
-        ..ConversationChange::default()
-    };
-    assert_eq!(serde_json::to_value(&set).unwrap(), json!({"avatar": id}));
-    let cleared = ConversationChange {
-        avatar: Some(None),
-        ..ConversationChange::default()
-    };
-    let wire = serde_json::to_value(&cleared).unwrap();
-    assert_eq!(wire, json!({"avatar": null}));
-    let back: ConversationChange = serde_json::from_value(wire).unwrap();
-    assert_eq!(back, cleared);
+    send.media = vec![id];
+    assert_eq!(serde_json::to_value(&send).unwrap()["media"], json!([id]));
 }

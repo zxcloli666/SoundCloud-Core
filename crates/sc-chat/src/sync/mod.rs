@@ -69,6 +69,7 @@ pub struct SyncEngine<L: Local = LocalStore> {
 
 impl SyncEngine<LocalStore> {
     pub fn new(api: Arc<Api>, store: Arc<Store>, events: Arc<dyn Events>) -> Self {
+        store.watch_uploads(Some(events.clone()));
         let cipher = Arc::new(DeviceCipher::new(api.clone()));
         Self::with_parts(api, Arc::new(LocalStore::new(store)), events, cipher)
     }

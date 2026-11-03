@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use super::ids::ConvId;
+use super::ids::{ConvId, Millis};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,4 +44,81 @@ pub struct MineQuery {
     pub cursor: Option<String>,
     #[serde(default)]
     pub limit: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaKind {
+    Image,
+    Avatar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttachmentKind {
+    Image,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageAttachment {
+    pub media_id: Uuid,
+    pub kind: AttachmentKind,
+    pub size: u64,
+    pub w: u32,
+    pub h: u32,
+    pub thumbhash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum AvatarChange {
+    Set { upload_id: Uuid },
+    Clear,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UploadState {
+    Queued,
+    Reserved,
+    Uploading,
+    Uploaded,
+    Committed,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UploadObject {
+    Image,
+    Thumb,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaUploadView {
+    pub id: Uuid,
+    pub album: Uuid,
+    pub position: u32,
+    pub conversation_id: ConvId,
+    pub kind: MediaKind,
+    pub state: UploadState,
+    pub object: UploadObject,
+    pub parts_sent: u32,
+    pub image_bytes: u64,
+    pub thumb_bytes: u64,
+    pub attempts: u32,
+    pub updated_at: Millis,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaUploadsEvent {
+    pub uploads: Vec<MediaUploadView>,
+    pub removed: Vec<Uuid>,
 }

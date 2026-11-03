@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::conversation::MemberRole;
 use super::embed::Embed;
 use super::ids::{ClientId, ConvId, DeviceId, Millis, Seq, UserId};
+use super::media::MessageAttachment;
 
 pub const TEXT_MAX: usize = sc_chat_wire::msg::TEXT_MAX;
 pub const EMBEDS_MAX: usize = sc_chat_wire::msg::EMBEDS_MAX;
@@ -167,6 +168,7 @@ pub struct Message {
     pub mentions: Vec<UserId>,
     pub mentions_me: bool,
     pub embeds: Vec<Embed>,
+    pub attachments: Vec<MessageAttachment>,
     pub forwarded_from: Option<Forwarded>,
     pub reactions: Vec<ReactionGroup>,
     pub pinned: bool,

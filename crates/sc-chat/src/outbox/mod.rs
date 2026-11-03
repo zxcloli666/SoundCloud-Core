@@ -183,6 +183,7 @@ fn pending(item: &OutboxItem, sender: String, failed: bool) -> Message {
         mentions: Vec::new(),
         mentions_me: false,
         embeds: Vec::new(),
+        attachments: Vec::new(),
         forwarded_from: None,
         reactions: Vec::new(),
         pinned: false,

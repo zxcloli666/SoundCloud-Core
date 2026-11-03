@@ -1,3 +1,4 @@
+mod avatar;
 mod color;
 mod corpus;
 mod measure;

@@ -1,3 +1,4 @@
+mod attachments;
 mod ck;
 pub(crate) mod codec;
 mod content;
@@ -6,10 +7,13 @@ mod dbkey;
 mod drafts;
 mod embeds;
 pub mod expiry;
+mod group_meta;
 mod history;
 mod items;
 mod local;
 mod media;
+mod media_rows;
+mod media_watch;
 pub(crate) mod messages;
 pub(crate) mod meta;
 pub mod migrations;
@@ -20,7 +24,7 @@ pub(crate) mod seal;
 
 use std::path::Path;
 use std::sync::atomic::AtomicI64;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use hmac::{Hmac, Mac};
 use rusqlite::Connection;
@@ -29,12 +33,13 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::contracts::{
-    ChatError, ChatResult, ClientId, ConvId, DeviceId, KeyStore, MessageClass, Millis, Seq,
+    ChatError, ChatResult, ClientId, ConvId, DeviceId, Events, KeyStore, MessageClass, Millis, Seq,
     SystemEvent, UserId,
 };
 
+pub use crate::contracts::{UploadObject, UploadState};
 pub use expiry::ExpiryTimer;
-pub use media::{MediaUpload, NewUpload, Reserved, UploadObject, UploadState};
+pub use media::{MediaUpload, NewUpload, Reserved};
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";
@@ -94,6 +99,7 @@ pub struct Store {
     conn: Mutex<Connection>,
     keys: StoreKeys,
     compacted_at: AtomicI64,
+    uploads_watch: RwLock<Option<Arc<dyn Events>>>,
 }
 
 impl Store {
@@ -129,6 +135,7 @@ impl Store {
             conn: Mutex::new(conn),
             keys,
             compacted_at: AtomicI64::new(Millis::MIN),
+            uploads_watch: RwLock::new(None),
         })
     }
 

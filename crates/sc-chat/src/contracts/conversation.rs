@@ -1,6 +1,9 @@
+use sc_chat_wire::proto::Attachment;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::ids::{ConvId, Millis, Seq, UserId};
+use super::media::AvatarChange;
 use super::message::{Message, PeerMark, RichText};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -53,6 +56,7 @@ pub struct UserRef {
 pub enum PreviewKind {
     Text,
     Embed,
+    Image,
     System,
     Deleted,
     Locked,
@@ -77,6 +81,7 @@ pub struct ConversationSummary {
     pub kind: ConversationKind,
     pub title: Option<String>,
     pub avatar_url: Option<String>,
+    pub avatar_media_id: Option<Uuid>,
     pub peer: Option<UserRef>,
     pub role: MemberRole,
     pub state: MemberState,
@@ -132,12 +137,11 @@ pub struct CreateConversation {
     pub title: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ConversationMeta {
     pub title: String,
     pub description: String,
-    pub avatar_media_id: Option<String>,
+    pub avatar: Option<Attachment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,11 +168,13 @@ pub struct MyPatch {
     pub archived: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationPatch {
     pub meta: Option<MetaPatch>,
     pub me: Option<MyPatch>,
+    #[serde(default)]
+    pub avatar: Option<AvatarChange>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

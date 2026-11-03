@@ -8,7 +8,6 @@ mod login;
 mod media;
 mod message;
 mod notify;
-pub(crate) mod present;
 mod room;
 mod safety;
 mod status;
