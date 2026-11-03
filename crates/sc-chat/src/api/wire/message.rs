@@ -24,6 +24,8 @@ pub struct SendMessage {
     pub target_seq: Option<i64>,
     #[serde(with = "super::b64")]
     pub body: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

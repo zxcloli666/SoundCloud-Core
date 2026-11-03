@@ -1,6 +1,7 @@
 mod auth;
 mod conversations;
 mod devices;
+mod media;
 mod members;
 mod messages;
 mod rooms;

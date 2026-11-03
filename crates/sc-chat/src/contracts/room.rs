@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::conversation::UserRef;
 use super::embed::Embed;
 use super::ids::UserId;
+use super::present::present;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -12,7 +13,24 @@ pub struct RoomPreview {
     pub host: UserRef,
     pub track: Option<Embed>,
     pub listeners: u32,
+    pub capacity: u32,
+    pub star_host: bool,
+    pub cover: Option<RoomCover>,
     pub alive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomCover {
+    pub url: String,
+    pub accent: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomImages {
+    Members,
+    Mods,
+    Off,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,4 +53,12 @@ pub struct RoomSettingsPatch {
     pub slow_mode_s: Option<u32>,
     pub chat_enabled: Option<bool>,
     pub links: Option<bool>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cover: Option<Option<RoomCover>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_images: Option<RoomImages>,
 }

@@ -3,7 +3,8 @@ use std::sync::Arc;
 use sc_chat::api::Identity;
 use sc_chat::api::wire::ConfigView;
 use sc_chat::{
-    Access, ChatConfig, ChatError, ChatLimits, ChatPhase, ChatResult, KeyStorage, UserId,
+    Access, ChatConfig, ChatError, ChatLimits, ChatPhase, ChatResult, KeyStorage, MediaConfig,
+    UserId,
 };
 
 use super::{Chat, Core, Halt};
@@ -145,5 +146,6 @@ fn config_of(view: ConfigView) -> ChatConfig {
             envelope_max: view.limits.envelope_max,
             disappearing_ttls: view.limits.disappearing_ttls,
         },
+        media: MediaConfig::from(&view.media),
     }
 }

@@ -335,7 +335,91 @@ fn wire_views_turn_into_what_the_webview_shows() {
     }))
     .unwrap();
     let shown = RoomPreview::from(&preview);
+    assert_eq!(
+        (shown.capacity, shown.star_host, shown.cover),
+        (10, false, None)
+    );
     let track = shown.track.unwrap();
     assert_eq!((track.title.as_str(), track.artwork_url), ("Song", None));
     assert_eq!(shown.host.name, "Host");
+
+    let mut starred = serde_json::to_value(&preview).unwrap();
+    starred["capacity"] = json!(25);
+    starred["star_host"] = json!(true);
+    starred["cover"] = json!({"url": "https://i1.sndcdn.com/c.jpg", "accent": 5});
+    let starred: RoomPreviewView = serde_json::from_value(starred).unwrap();
+    let shown = RoomPreview::from(&starred);
+    assert_eq!((shown.capacity, shown.star_host), (25, true));
+    assert_eq!(shown.cover.unwrap().accent, 5);
+}
+
+#[tokio::test]
+async fn config_without_media_turns_uploads_off_and_with_media_carries_the_quota() {
+    use sc_chat::MediaConfig;
+
+    let rig = rig();
+    let api = rig.engine.api();
+    rig.server.json("GET", "/chat/config", config());
+    let mut with_media = config();
+    with_media["media"] = json!({
+        "uploads": true,
+        "star": true,
+        "quota": 1_073_741_824u64,
+        "used": 4_096,
+        "limits": {
+            "image_max_bytes": 614_400,
+            "thumb_max_bytes": 32_768,
+            "avatar_max_bytes": 65_536,
+            "album_max": 10,
+            "room_album_max": 4,
+            "restore_window_s": 15,
+        },
+    });
+    rig.server.json("GET", "/chat/config", with_media);
+
+    let old = api.config().await.unwrap();
+    assert_eq!(MediaConfig::from(&old.media), MediaConfig::default());
+    let media = MediaConfig::from(&api.config().await.unwrap().media);
+    assert!(media.uploads && media.star);
+    assert_eq!((media.quota, media.used), (1_073_741_824, 4_096));
+    assert_eq!(
+        (media.limits.image_max_bytes, media.limits.room_album_max),
+        (614_400, 4)
+    );
+    assert_eq!(
+        serde_json::to_value(&media).unwrap()["limits"]["restoreWindowS"],
+        json!(15)
+    );
+}
+
+#[test]
+fn sends_and_patches_name_media_only_when_there_is_some() {
+    use sc_chat::api::wire::{ConversationChange, SendMessage};
+
+    let text = SendMessage {
+        client_id: Uuid::nil(),
+        class: "post".into(),
+        epoch: 1,
+        target_seq: None,
+        body: vec![1],
+        media: Vec::new(),
+    };
+    assert!(serde_json::to_value(&text).unwrap().get("media").is_none());
+
+    let untouched = ConversationChange::default();
+    assert_eq!(serde_json::to_value(&untouched).unwrap(), json!({}));
+    let id = Uuid::from_u128(9);
+    let set = ConversationChange {
+        avatar: Some(Some(id)),
+        ..ConversationChange::default()
+    };
+    assert_eq!(serde_json::to_value(&set).unwrap(), json!({"avatar": id}));
+    let cleared = ConversationChange {
+        avatar: Some(None),
+        ..ConversationChange::default()
+    };
+    let wire = serde_json::to_value(&cleared).unwrap();
+    assert_eq!(wire, json!({"avatar": null}));
+    let back: ConversationChange = serde_json::from_value(wire).unwrap();
+    assert_eq!(back, cleared);
 }

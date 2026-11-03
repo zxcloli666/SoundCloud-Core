@@ -8,12 +8,16 @@ use uuid::Uuid;
 use crate::support::*;
 
 const MASTER: [u8; 32] = [5; 32];
+const CONVERSATION: Uuid = Uuid::from_u128(0xc0);
+const IMAGE_ID: Uuid = Uuid::from_u128(0x1a);
+const THUMB_ID: Uuid = Uuid::from_u128(0x1b);
 
 fn upload(album: Uuid, position: u32) -> NewUpload {
     let prepared = prepare_image(&jpeg(&photo(64, 48))).unwrap();
     NewUpload {
         album,
         position,
+        conversation_id: CONVERSATION,
         image_ref: format!("media/{album}/{position}.img"),
         thumb_ref: format!("media/{album}/{position}.thumb"),
         attachment: prepared.attachment,
@@ -22,9 +26,8 @@ fn upload(album: Uuid, position: u32) -> NewUpload {
 
 fn reserved() -> Reserved {
     Reserved {
-        reserve_id: "rsv-1".into(),
-        media_id: "m-1".into(),
-        thumb_media_id: "t-1".into(),
+        media_id: IMAGE_ID,
+        thumb_media_id: THUMB_ID,
         presign_expires_at: 10_000,
     }
 }
@@ -56,9 +59,13 @@ fn an_album_queues_in_order_and_walks_every_state() {
     store.upload_reserved(ids[0], &reserved(), 200).unwrap();
     let after = store.upload(ids[0]).unwrap().unwrap();
     assert_eq!(after.state, UploadState::Reserved);
-    assert_eq!(after.reserve_id.as_deref(), Some("rsv-1"));
-    assert_eq!(after.attachment.media_id, "m-1");
-    assert_eq!(after.attachment.thumb.as_ref().unwrap().media_id, "t-1");
+    assert_eq!(after.media_id, Some(IMAGE_ID));
+    assert_eq!(after.conversation_id, CONVERSATION);
+    assert_eq!(after.attachment.media_id, IMAGE_ID.to_string());
+    assert_eq!(
+        after.attachment.thumb.as_ref().unwrap().media_id,
+        THUMB_ID.to_string()
+    );
     assert!(!after.presign_expired(9_999) && after.presign_expired(10_000));
 
     store
@@ -119,6 +126,82 @@ fn a_commit_needs_an_uploaded_object() {
 }
 
 #[test]
+fn a_fresh_presign_for_the_same_ids_keeps_the_progress() {
+    let store = Store::open_in_memory(&MASTER).unwrap();
+    let id = store.enqueue_upload(&upload(Uuid::new_v4(), 0), 1).unwrap();
+    store.upload_reserved(id, &reserved(), 2).unwrap();
+    store
+        .upload_object_done(id, UploadObject::Image, 3)
+        .unwrap();
+    store
+        .upload_progress(id, UploadObject::Thumb, 2, Some("stage-1"), 4)
+        .unwrap();
+
+    let fresh = Reserved {
+        presign_expires_at: 90_000,
+        ..reserved()
+    };
+    store.upload_reserved(id, &fresh, 5).unwrap();
+    let kept = store.upload(id).unwrap().unwrap();
+    assert_eq!(
+        (
+            kept.state,
+            kept.object,
+            kept.parts_sent,
+            kept.stage_id.as_deref()
+        ),
+        (
+            UploadState::Uploading,
+            UploadObject::Thumb,
+            2,
+            Some("stage-1")
+        )
+    );
+    assert_eq!(kept.presign_expires_at, Some(90_000));
+
+    let other = Reserved {
+        media_id: Uuid::from_u128(0x2a),
+        thumb_media_id: Uuid::from_u128(0x2b),
+        presign_expires_at: 95_000,
+    };
+    store.upload_reserved(id, &other, 6).unwrap();
+    let reset = store.upload(id).unwrap().unwrap();
+    assert_eq!(
+        (reset.state, reset.object, reset.parts_sent, reset.stage_id),
+        (UploadState::Reserved, UploadObject::Image, 0, None)
+    );
+    assert_eq!(reset.media_id, Some(other.media_id));
+    assert_eq!(
+        reset.attachment.thumb.unwrap().media_id,
+        other.thumb_media_id.to_string()
+    );
+}
+
+#[test]
+fn a_missing_object_goes_back_to_its_put() {
+    let store = Store::open_in_memory(&MASTER).unwrap();
+    let id = store.enqueue_upload(&upload(Uuid::new_v4(), 0), 1).unwrap();
+    store.upload_reserved(id, &reserved(), 2).unwrap();
+    store
+        .upload_object_done(id, UploadObject::Image, 3)
+        .unwrap();
+    store
+        .upload_object_done(id, UploadObject::Thumb, 4)
+        .unwrap();
+    store.upload_redo(id, UploadObject::Thumb, 5).unwrap();
+    let redo = store.upload(id).unwrap().unwrap();
+    assert_eq!(
+        (redo.state, redo.object, redo.parts_sent),
+        (UploadState::Uploading, UploadObject::Thumb, 0)
+    );
+    store.upload_committed(id, 6).unwrap();
+    assert_eq!(
+        store.upload(id).unwrap().unwrap().state,
+        UploadState::Uploading
+    );
+}
+
+#[test]
 fn failures_count_and_a_hard_one_ends_the_upload() {
     let store = Store::open_in_memory(&MASTER).unwrap();
     let id = store.enqueue_upload(&upload(Uuid::new_v4(), 0), 1).unwrap();
@@ -143,7 +226,7 @@ fn a_restart_clears_the_reserve_and_keeps_the_file() {
     let after = store.upload(id).unwrap().unwrap();
     assert_eq!(after.state, UploadState::Queued);
     assert_eq!(
-        (&after.reserve_id, &after.stage_id, after.parts_sent),
+        (&after.media_id, &after.stage_id, after.parts_sent),
         (&None, &None, 0)
     );
     assert!(after.presign_expired(0));
@@ -185,8 +268,8 @@ fn an_album_survives_an_app_restart_with_its_keys_sealed() {
     );
     assert_eq!(resumed.stage_id.as_deref(), Some("stage-3"));
     assert_eq!(resumed.attachment.key, key);
-    assert_eq!(resumed.attachment.media_id, "m-1");
-    assert_eq!(resumed.reserve_id.as_deref(), Some("rsv-1"));
+    assert_eq!(resumed.attachment.media_id, IMAGE_ID.to_string());
+    assert_eq!(resumed.media_id, Some(IMAGE_ID));
 
     let refs = store.remove_album_uploads(album).unwrap();
     assert_eq!(refs.len(), 1);

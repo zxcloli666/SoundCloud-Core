@@ -5,10 +5,11 @@ use super::local::Local;
 use super::{SyncEngine, fatal, jitter, summary};
 use crate::api::wire::{SendAnswer, SendMessage};
 use crate::contracts::{
-    ChatError, ChatResult, ClientId, ConvId, CoreEvent, HistoryQuery, Message, MessagesEvent,
-    MessagesOrigin, Seq,
+    ChatError, ChatResult, ClientId, ConvId, CoreEvent, HistoryQuery, Message, MessageClass,
+    MessagesEvent, MessagesOrigin, Seq,
 };
 use crate::crypto::MessageAt;
+use crate::media::post_media;
 use crate::outbox::OutboxItem;
 
 pub const OUTBOX_BATCH: usize = 16;
@@ -66,12 +67,17 @@ impl<L: Local> SyncEngine<L> {
             class: item.class,
         };
         let body = self.cipher.seal_message(&ck, &at, &envelope)?;
+        let media = match item.class {
+            MessageClass::Post => post_media(&envelope.attachments)?,
+            _ => Vec::new(),
+        };
         let message = SendMessage {
             client_id: item.client_id,
             class: item.class.as_str().to_owned(),
             epoch: i32::try_from(epoch).map_err(|_| ChatError::Invalid)?,
             target_seq: item.target_seq,
             body,
+            media,
         };
         self.api.send(item.conversation_id, &message).await
     }

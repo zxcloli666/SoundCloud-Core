@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::contracts::{Embed, EmbedKind, RoomPreview, UserRef};
+use crate::contracts::{Embed, EmbedKind, RoomCover, RoomPreview, UserRef};
 use crate::embeds::validate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +23,10 @@ pub struct RoomPreviewView {
     #[serde(default)]
     pub public: bool,
     pub alive: bool,
+    #[serde(default)]
+    pub star_host: bool,
+    #[serde(default)]
+    pub cover: Option<RoomCover>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +82,9 @@ impl From<&RoomPreviewView> for RoomPreview {
             },
             track: view.track.as_ref().and_then(track_card),
             listeners: view.listeners,
+            capacity: view.capacity,
+            star_host: view.star_host,
+            cover: view.cover.clone(),
             alive: view.alive,
         }
     }

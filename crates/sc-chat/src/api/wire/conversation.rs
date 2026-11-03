@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::contracts::present::present;
 use crate::contracts::{ConversationKind, Mute, MyPatch, NotifyLevel};
 
 pub const MUTE_FOREVER_MS: i64 = 253_402_300_799_000;
@@ -75,6 +76,12 @@ pub struct ConversationChange {
     pub meta_epoch: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings: Option<GroupSettings>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub avatar: Option<Option<Uuid>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::ids::{DeviceId, Millis, UserId};
+use super::media::MediaConfig;
 
 pub const DIRECT_MAX_BYTES: u32 = 256 * 1024;
 pub const PRO_MAX_BYTES: u32 = 24 * 1024;
@@ -138,4 +139,5 @@ pub struct ChatConfig {
     pub incarnation: Uuid,
     pub ock_current: u8,
     pub limits: ChatLimits,
+    pub media: MediaConfig,
 }
