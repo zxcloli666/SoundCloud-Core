@@ -23,6 +23,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 image-webp = { version = "0.2.4", default-features = false }
 thumbhash = { version = "0.1.0", default-features = false }
 webp = { version = "0.3", default-features = false }
+qcms = { version = "0.3", default-features = false, features = ["iccv4-enabled"] }
 
 [dev-dependencies]
 sc-chat-wire = { path = "../sc-chat-wire", features = ["vectors"] }

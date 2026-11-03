@@ -2,6 +2,7 @@ use std::io::Cursor;
 
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
+use qcms::{DataType, Intent, Profile, Transform};
 
 use super::{MediaError, SOURCE_MAX_BYTES, SOURCE_MAX_PIXELS};
 
@@ -30,10 +31,43 @@ pub(super) fn decode(bytes: &[u8]) -> Result<DynamicImage, MediaError> {
     if w == 0 || h == 0 || u64::from(w) * u64::from(h) > SOURCE_MAX_PIXELS {
         return Err(MediaError::Dimensions);
     }
+    let icc = decoder.icc_profile().ok().flatten();
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
     let mut image = DynamicImage::from_decoder(decoder).map_err(|_| MediaError::Malformed)?;
     image.apply_orientation(orientation);
-    Ok(flatten(image))
+    let image = flatten(image);
+    Ok(match icc {
+        Some(profile) => to_srgb(image, &profile),
+        None => image,
+    })
+}
+
+fn to_srgb(image: DynamicImage, profile: &[u8]) -> DynamicImage {
+    let Some(input) = Profile::new_from_slice(profile, false) else {
+        return image;
+    };
+    let output = Profile::new_sRGB();
+    match image {
+        DynamicImage::ImageRgb8(mut pixels) => {
+            if let Some(transform) =
+                Transform::new(&input, &output, DataType::RGB8, Intent::default())
+            {
+                let source = pixels.as_raw().clone();
+                transform.convert(&source, &mut pixels);
+            }
+            DynamicImage::ImageRgb8(pixels)
+        }
+        DynamicImage::ImageRgba8(mut pixels) => {
+            if let Some(transform) =
+                Transform::new(&input, &output, DataType::RGBA8, Intent::default())
+            {
+                let source = pixels.as_raw().clone();
+                transform.convert(&source, &mut pixels);
+            }
+            DynamicImage::ImageRgba8(pixels)
+        }
+        other => other,
+    }
 }
 
 fn is_heif_brand(brand: &[u8]) -> bool {
