@@ -6,4 +6,5 @@ mod corpus;
 mod measure;
 mod queue;
 mod roundtrip;
+mod sealed;
 mod support;

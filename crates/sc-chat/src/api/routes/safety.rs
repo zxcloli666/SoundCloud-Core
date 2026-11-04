@@ -1,8 +1,8 @@
 use crate::api::Api;
 use crate::api::path::segment;
 use crate::api::wire::{
-    CardView, FileReport, FiledReport, InviteView, JoinAnswer, NewInvite, RequestList,
-    SettingsChange, SettingsView,
+    CardView, FileBackdropReport, FileReport, FiledReport, InviteView, JoinAnswer, NewInvite,
+    RequestList, SettingsChange, SettingsView,
 };
 use crate::contracts::{ChatResult, ConvId};
 
@@ -45,6 +45,10 @@ impl Api {
     }
 
     pub async fn report(&self, body: &FileReport) -> ChatResult<FiledReport> {
+        self.post("/chat/reports", body).await
+    }
+
+    pub async fn report_backdrop(&self, body: &FileBackdropReport) -> ChatResult<FiledReport> {
         self.post("/chat/reports", body).await
     }
 

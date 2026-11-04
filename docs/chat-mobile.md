@@ -157,6 +157,7 @@ Core seals every file. The app keeps the sealed bytes in its own files and does 
 | `setGroupAvatar(id, AvatarChange.Set(uploadId))` | a committed avatar upload of this group; `Clear` drops it. Rides a meta message |
 | `setRoomBackdrop(roomCode, roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it |
 | `setRoomPreset(roomCode, roomChatId, presetId)` | a bundled preset; also clears an uploaded backdrop |
+| `reportBackdrop(BackdropReport(conversationId, mediaId, reason, comment))` | a member reports the room backdrop on screen, never the host; comment up to 500 chars. `MediaMissing` means the room shows another backdrop now |
 | `roomBackdrop(roomChatId)` | the uploaded backdrop the latest room meta carries, as `MediaInfo`, or `null` |
 | `mediaInfo(conversationId, mediaId)` | size, `w`, `h`, `thumbhash` and the thumb id of an album image, a group avatar or a room backdrop |
 | `mediaUrls(conversationId, ids)` | presigned `GET` urls, 15 min; `DELETED` shows "Картинка удалена", `LOST` "Картинка недоступна" |

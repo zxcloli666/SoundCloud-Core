@@ -1,6 +1,7 @@
-use sc_chat::api::wire::FileReport;
+use sc_chat::api::wire::{FileBackdropReport, FileReport};
 use sc_chat::{
-    ChatError, ChatResult, ConvId, ConversationSummary, ReportInput, is_disappearing_ttl,
+    BackdropReport, ChatError, ChatResult, ConvId, ConversationSummary, ReportInput,
+    is_disappearing_ttl,
 };
 
 use crate::runtime::Chat;
@@ -27,20 +28,35 @@ impl Chat {
         self.api.report(&FileReport::from(&report)).await?;
         Ok(())
     }
+
+    pub async fn report_backdrop(&self, report: BackdropReport) -> ChatResult<()> {
+        let report = BackdropReport {
+            comment: comment_of(report.comment)?,
+            ..report
+        };
+        self.api
+            .report_backdrop(&FileBackdropReport::from(&report))
+            .await?;
+        Ok(())
+    }
 }
 
 pub fn checked(report: ReportInput) -> ChatResult<ReportInput> {
-    let comment = report
-        .comment
-        .map(|comment| comment.trim().to_string())
-        .filter(|comment| !comment.is_empty());
-    let too_long = comment
-        .as_ref()
-        .is_some_and(|comment| comment.chars().count() > COMMENT_MAX);
-    if report.seq_from > report.seq_to || too_long {
+    if report.seq_from > report.seq_to {
         return Err(ChatError::Invalid);
     }
+    let comment = comment_of(report.comment)?;
     Ok(ReportInput { comment, ..report })
+}
+
+fn comment_of(comment: Option<String>) -> ChatResult<Option<String>> {
+    let comment = comment
+        .map(|comment| comment.trim().to_string())
+        .filter(|comment| !comment.is_empty());
+    match comment {
+        Some(text) if text.chars().count() > COMMENT_MAX => Err(ChatError::Invalid),
+        comment => Ok(comment),
+    }
 }
 
 #[cfg(test)]
@@ -57,6 +73,14 @@ mod tests {
             reason: ReportReason::Spam,
             comment: comment.map(str::to_owned),
         }
+    }
+
+    #[test]
+    fn a_backdrop_report_comment_follows_the_same_rules() {
+        assert_eq!(comment_of(Some("  ".into())), Ok(None));
+        assert_eq!(comment_of(Some(" фон ".into())), Ok(Some("фон".into())));
+        let long = "x".repeat(COMMENT_MAX + 1);
+        assert_eq!(comment_of(Some(long)), Err(ChatError::Invalid));
     }
 
     #[test]

@@ -2,8 +2,8 @@ use sc_chat::api::wire::{
     CommitAnswer, DeleteAnswer, MediaSelection, MediaUsage, MinePage, RestoreAnswer, UrlsAnswer,
 };
 use sc_chat::{
-    AvatarChange, BackdropChange, ChatError, ConvId, MediaConfig, MediaKind, Message, MineQuery,
-    SendInput, UploadObject,
+    AvatarChange, BackdropChange, BackdropReport, ChatError, ConvId, MediaConfig, MediaKind,
+    Message, MineQuery, SendInput, UploadObject,
 };
 use uuid::Uuid;
 
@@ -184,6 +184,11 @@ impl ChatClient {
         change: AvatarChange,
     ) -> Result<Message, ChatError> {
         self.run(|chat| async move { chat.set_group_avatar(conversation_id, change).await })
+            .await
+    }
+
+    pub async fn report_backdrop(&self, report: BackdropReport) -> Result<(), ChatError> {
+        self.run(|chat| async move { chat.report_backdrop(report).await })
             .await
     }
 
