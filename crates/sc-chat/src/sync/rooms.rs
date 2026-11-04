@@ -19,11 +19,8 @@ impl<L: Local> SyncEngine<L> {
             },
             None => seated(id, code, from_seq, self.now()),
         };
-        self.room_meta_due(id);
         let messages = self.catch_up(id, summary.last_seq).await?;
-        if let Some(backdrop) = self.settle_room_meta(id).await? {
-            summary.avatar_media_id = backdrop;
-        }
+        self.room_meta(&mut summary, true).await?;
         summary::absorb(&mut summary, &messages);
         self.save(std::slice::from_ref(&summary))?;
         self.emit_summaries(vec![summary.clone()]);
@@ -55,9 +52,7 @@ impl<L: Local> SyncEngine<L> {
                 continue;
             }
             let messages = self.catch_up(*id, summary.last_seq).await?;
-            if let Some(backdrop) = self.settle_room_meta(*id).await? {
-                summary.avatar_media_id = backdrop;
-            }
+            self.room_meta(&mut summary, false).await?;
             summary::absorb(&mut summary, &messages);
             self.save(std::slice::from_ref(&summary))?;
             if !messages.is_empty() {

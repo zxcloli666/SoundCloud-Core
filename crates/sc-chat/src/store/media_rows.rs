@@ -4,9 +4,55 @@ use sc_chat_wire::proto::Attachment;
 use uuid::Uuid;
 
 use super::codec::Label;
-use super::media::MediaUpload;
 use super::{StoreKeys, seal};
-use crate::contracts::{ChatError, ChatResult};
+use crate::contracts::{
+    ChatError, ChatResult, ConvId, MediaKind, Millis, UploadObject, UploadState,
+};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MediaUpload {
+    pub id: Uuid,
+    pub album: Uuid,
+    pub position: u32,
+    pub conversation_id: ConvId,
+    pub kind: MediaKind,
+    pub image_ref: String,
+    pub thumb_ref: Option<String>,
+    pub attachment: Attachment,
+    pub state: UploadState,
+    pub object: UploadObject,
+    pub media_id: Option<Uuid>,
+    pub stage_id: Option<String>,
+    pub parts_sent: u32,
+    pub presign_expires_at: Option<Millis>,
+    pub attempts: u32,
+    pub created_at: Millis,
+    pub updated_at: Millis,
+}
+
+impl MediaUpload {
+    pub fn presign_expired(&self, now: Millis) -> bool {
+        self.presign_expires_at.is_none_or(|at| at <= now)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewUpload {
+    pub album: Uuid,
+    pub position: u32,
+    pub conversation_id: ConvId,
+    pub kind: MediaKind,
+    pub image_ref: String,
+    pub thumb_ref: Option<String>,
+    pub attachment: Attachment,
+}
+
+#[derive(Debug, Clone)]
+pub struct Reserved {
+    pub media_id: Uuid,
+    pub thumb_media_id: Option<Uuid>,
+    pub presign_expires_at: Millis,
+}
 
 const COLUMNS: &str = "id, album, position, conversation_id, kind, image_ref, thumb_ref, state, object, media_id, stage_id, parts_sent, presign_expires_at, attempts, created_at, updated_at, nonce, attachment";
 

@@ -11,10 +11,7 @@ impl Store {
         room: ConvId,
         change: &BackdropChange,
     ) -> ChatResult<ConversationMeta> {
-        let not_a_room = self
-            .conversation(room)?
-            .is_some_and(|summary| summary.kind != ConversationKind::Room);
-        if not_a_room {
+        if self.not_a_room(room)? {
             return Err(ChatError::Invalid);
         }
         let avatar = match change {
@@ -31,6 +28,9 @@ impl Store {
     }
 
     pub fn room_backdrop(&self, room: ConvId) -> ChatResult<Option<Attachment>> {
+        if self.not_a_room(room)? {
+            return Ok(None);
+        }
         Ok(self.group_meta(room)?.and_then(|meta| meta.avatar))
     }
 
@@ -39,5 +39,11 @@ impl Store {
             Some(meta) => self.put_group_meta(room, meta),
             None => self.drop_group_meta(room),
         }
+    }
+
+    fn not_a_room(&self, id: ConvId) -> ChatResult<bool> {
+        Ok(self
+            .conversation(id)?
+            .is_some_and(|summary| summary.kind != ConversationKind::Room))
     }
 }

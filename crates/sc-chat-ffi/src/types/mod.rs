@@ -10,3 +10,8 @@ mod message;
 mod platform;
 mod safety;
 mod status;
+mod storage;
+mod uploads;
+
+pub use storage::{MediaInfo, OpenedMedia};
+pub use uploads::{MediaSeal, MediaUploadRow, NewMediaUpload, PreparedMedia, PutTargets};

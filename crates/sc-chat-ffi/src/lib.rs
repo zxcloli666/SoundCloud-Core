@@ -1,5 +1,6 @@
 mod calls;
 mod client;
+mod client_media;
 mod platform;
 mod runtime;
 mod setup;
@@ -8,6 +9,9 @@ mod types;
 pub use client::ChatClient;
 pub use platform::{ChatKeys, ChatListener, ChatTransport, KeyFailure, NetFailure};
 pub use setup::ChatSetup;
+pub use types::{
+    MediaInfo, MediaSeal, MediaUploadRow, NewMediaUpload, OpenedMedia, PreparedMedia, PutTargets,
+};
 
 uniffi::setup_scaffolding!();
 

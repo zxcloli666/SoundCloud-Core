@@ -40,7 +40,7 @@ use crate::contracts::{
 
 pub use crate::contracts::{UploadObject, UploadState};
 pub use expiry::ExpiryTimer;
-pub use media::{MediaUpload, NewUpload, Reserved};
+pub use media_rows::{MediaUpload, NewUpload, Reserved};
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";

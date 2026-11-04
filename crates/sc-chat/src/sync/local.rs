@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use uuid::Uuid;
+
 use crate::contracts::{
     ChatResult, ClientId, ConvId, ConversationMeta, ConversationSummary, GoneMessage, HistoryPage,
     HistoryQuery, Message, Millis, PeerMark, Seq, UserId, UserRef,
@@ -16,6 +18,7 @@ pub trait Local: Send + Sync {
     fn put_conversations(&self, items: &[ConversationSummary]) -> ChatResult<()>;
     fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()>;
     fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()>;
+    fn meta_image(&self, id: ConvId) -> ChatResult<Option<Uuid>>;
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>>;
     fn put_users(&self, users: &[UserRef]) -> ChatResult<()>;
     fn put_marks(&self, id: ConvId, marks: &[PeerMark]) -> ChatResult<()>;
@@ -84,6 +87,14 @@ impl Local for LocalStore {
 
     fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {
         self.store.put_room_meta(id, meta)
+    }
+
+    fn meta_image(&self, id: ConvId) -> ChatResult<Option<Uuid>> {
+        Ok(self
+            .store
+            .group_meta(id)?
+            .as_ref()
+            .and_then(super::conversations::avatar_id))
     }
 
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>> {

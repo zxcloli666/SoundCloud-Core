@@ -1367,6 +1367,7 @@ name = "sc-chat-ffi"
 version = "0.2.0-alpha.3"
 dependencies = [
  "async-trait",
+ "image",
  "sc-chat",
  "thiserror",
  "tokio",

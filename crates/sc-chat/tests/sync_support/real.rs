@@ -16,6 +16,7 @@ pub const INC: Uuid = Uuid::from_u128(0x1c);
 pub const CK: [u8; 32] = [7; 32];
 
 pub struct Real {
+    pub clock: Arc<TestClock>,
     pub server: Arc<Server>,
     pub events: Arc<Recorder>,
     pub keys: Arc<DeviceKeys>,
@@ -26,7 +27,7 @@ pub fn real(conversations: &[ConversationSummary]) -> Real {
     let clock = Arc::new(TestClock::at(START_MS));
     let server = Arc::new(Server::new(&[Tier::Direct], clock.clone()));
     let api = Arc::new(Api::with_exchange(
-        Arc::new(Channel::new(clock)),
+        Arc::new(Channel::new(clock.clone())),
         server.clone(),
         server.clone(),
     ));
@@ -49,6 +50,7 @@ pub fn real(conversations: &[ConversationSummary]) -> Real {
     let engine = SyncEngine::new(api, Arc::new(store), events.clone());
     engine.set_user(Some(ME.into()));
     Real {
+        clock,
         server,
         events,
         keys,

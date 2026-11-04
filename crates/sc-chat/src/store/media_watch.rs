@@ -3,7 +3,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use super::Store;
-use super::media::MediaUpload;
+use super::media_rows::MediaUpload;
 use super::media_rows::load;
 use crate::contracts::{CoreEvent, Events, MediaUploadView, MediaUploadsEvent};
 

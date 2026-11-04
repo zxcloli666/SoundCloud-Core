@@ -1,59 +1,11 @@
 use rusqlite::params;
 use sc_chat_wire::prost::Message;
-use sc_chat_wire::proto::Attachment;
 use uuid::Uuid;
 
 use super::codec::label;
-use super::media_rows::{aad, load};
+use super::media_rows::{MediaUpload, NewUpload, Reserved, aad, load};
 use super::{Store, seal};
-use crate::contracts::{
-    ChatError, ChatResult, ConvId, MediaKind, Millis, UploadObject, UploadState,
-};
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MediaUpload {
-    pub id: Uuid,
-    pub album: Uuid,
-    pub position: u32,
-    pub conversation_id: ConvId,
-    pub kind: MediaKind,
-    pub image_ref: String,
-    pub thumb_ref: Option<String>,
-    pub attachment: Attachment,
-    pub state: UploadState,
-    pub object: UploadObject,
-    pub media_id: Option<Uuid>,
-    pub stage_id: Option<String>,
-    pub parts_sent: u32,
-    pub presign_expires_at: Option<Millis>,
-    pub attempts: u32,
-    pub created_at: Millis,
-    pub updated_at: Millis,
-}
-
-impl MediaUpload {
-    pub fn presign_expired(&self, now: Millis) -> bool {
-        self.presign_expires_at.is_none_or(|at| at <= now)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NewUpload {
-    pub album: Uuid,
-    pub position: u32,
-    pub conversation_id: ConvId,
-    pub kind: MediaKind,
-    pub image_ref: String,
-    pub thumb_ref: Option<String>,
-    pub attachment: Attachment,
-}
-
-#[derive(Debug, Clone)]
-pub struct Reserved {
-    pub media_id: Uuid,
-    pub thumb_media_id: Option<Uuid>,
-    pub presign_expires_at: Millis,
-}
+use crate::contracts::{ChatError, ChatResult, MediaKind, Millis, UploadObject};
 
 impl Store {
     pub fn enqueue_upload(&self, upload: &NewUpload, now: Millis) -> ChatResult<Uuid> {

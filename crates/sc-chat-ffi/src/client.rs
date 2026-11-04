@@ -17,7 +17,7 @@ const THREADS: usize = 2;
 
 #[derive(uniffi::Object)]
 pub struct ChatClient {
-    chat: Arc<Chat>,
+    pub(crate) chat: Arc<Chat>,
     runtime: Option<Runtime>,
 }
 
@@ -169,7 +169,7 @@ impl ChatClient {
 }
 
 impl ChatClient {
-    async fn run<T, F, Fut>(&self, call: F) -> ChatResult<T>
+    pub(crate) async fn run<T, F, Fut>(&self, call: F) -> ChatResult<T>
     where
         F: FnOnce(Arc<Chat>) -> Fut,
         Fut: Future<Output = ChatResult<T>> + Send + 'static,

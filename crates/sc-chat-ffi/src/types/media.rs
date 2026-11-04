@@ -1,6 +1,6 @@
 use sc_chat::{
-    AttachmentKind, ConvId, MediaKind, MediaUploadView, MediaUploadsEvent, MessageAttachment,
-    Millis, UploadObject, UploadState,
+    AttachmentKind, AvatarChange, BackdropChange, ConvId, MediaConfig, MediaKind, MediaLimits,
+    MediaUploadView, MediaUploadsEvent, MessageAttachment, Millis, UploadObject, UploadState,
 };
 use uuid::Uuid;
 
@@ -23,6 +23,7 @@ pub struct MessageAttachment {
 pub enum MediaKind {
     Image,
     Avatar,
+    Backdrop,
 }
 
 #[uniffi::remote(Enum)]
@@ -61,4 +62,35 @@ pub struct MediaUploadView {
 pub struct MediaUploadsEvent {
     pub uploads: Vec<MediaUploadView>,
     pub removed: Vec<Uuid>,
+}
+
+#[uniffi::remote(Record)]
+pub struct MediaLimits {
+    pub image_max_bytes: u32,
+    pub thumb_max_bytes: u32,
+    pub avatar_max_bytes: u32,
+    pub album_max: u32,
+    pub room_album_max: u32,
+    pub restore_window_s: u32,
+}
+
+#[uniffi::remote(Record)]
+pub struct MediaConfig {
+    pub uploads: bool,
+    pub star: bool,
+    pub quota: u64,
+    pub used: u64,
+    pub limits: MediaLimits,
+}
+
+#[uniffi::remote(Enum)]
+pub enum AvatarChange {
+    Set { upload_id: Uuid },
+    Clear,
+}
+
+#[uniffi::remote(Enum)]
+pub enum BackdropChange {
+    Set { upload_id: Uuid },
+    Clear,
 }

@@ -29,6 +29,7 @@ use std::sync::{Arc, Mutex};
 pub use cipher::{Cipher, DeviceCipher};
 pub use local::{Local, LocalStore};
 pub use marks::MarkBatch;
+pub use room_meta::ROOM_META_RETRY_MS;
 pub use tiers::{BACKOFF_MAX_MS, MID_HOLD_MIN_MS};
 
 pub const SHORT_POLL_GAP_MS: u64 = 3_000;

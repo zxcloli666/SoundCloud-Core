@@ -17,9 +17,10 @@ use sc_chat::api::Api;
 use sc_chat::api::wire::RegisterDevice;
 use sc_chat::channel::Channel;
 use sc_chat::crypto::DeviceKeys;
+use sc_chat::media::MediaWorker;
 use sc_chat::{ChatConfig, ChatError, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
 use tokio::runtime::Handle;
-use tokio::sync::watch;
+use tokio::sync::{Semaphore, watch};
 
 use crate::platform::{ChatKeys, ChatListener, ChatTransport, Keys, Wire};
 use crate::setup::ChatSetup;
@@ -28,6 +29,8 @@ use feed::Feed;
 use session::Session;
 
 pub use lifecycle::Halt;
+
+const PREPARE_SLOTS: usize = 2;
 pub use local::Core;
 
 pub struct Held {
@@ -40,6 +43,8 @@ pub struct Chat {
     pub handle: Handle,
     pub api: Arc<Api>,
     pub keys: Arc<Keys>,
+    pub media: MediaWorker,
+    pub preparing: Arc<Semaphore>,
     dir: PathBuf,
     device: RegisterDevice,
     clock: Arc<dyn Clock>,
@@ -67,6 +72,8 @@ impl Chat {
             handle,
             api: Arc::new(Api::new(channel, Arc::new(Wire(transport)))),
             keys: Arc::new(Keys(keys)),
+            media: MediaWorker::default(),
+            preparing: Arc::new(Semaphore::new(PREPARE_SLOTS)),
             dir: PathBuf::from(setup.data_dir),
             device: RegisterDevice {
                 platform: setup.platform,

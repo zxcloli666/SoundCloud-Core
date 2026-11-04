@@ -13,6 +13,7 @@ use sc_chat::{
     GoneMessage, HistoryPage, HistoryQuery, Message, MessageBody, MessageClass, Millis, PeerMark,
     RichText, Seq, UserId, UserRef,
 };
+use uuid::Uuid;
 
 #[derive(Default)]
 struct Data {
@@ -205,6 +206,13 @@ impl Local for MemoryLocal {
             .group_meta
             .insert(id, meta.clone());
         Ok(())
+    }
+
+    fn meta_image(&self, id: ConvId) -> ChatResult<Option<Uuid>> {
+        Ok(self
+            .group_meta(id)
+            .and_then(|meta| meta.avatar)
+            .and_then(|avatar| Uuid::parse_str(&avatar.media_id).ok()))
     }
 
     fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {

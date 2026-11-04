@@ -40,7 +40,7 @@ Copy the `sc-chat-ios` folder into the repo, add it in Xcode with File > Add Pac
 |---|---|
 | `ChatKeys` | `load`, `save`, `delete` of four secrets by `KeyName`, see Storage |
 | `ChatTransport` | `tiers()`: tiers to try, best first. `exchange(request)`: send one sealed envelope |
-| `ChatListener` | `onEvent(event)`: status, sync, messages, typing, gone, device added |
+| `ChatListener` | `onEvent(event)`: status, sync, messages, typing, gone, device added, media uploads |
 
 `exchange` rules:
 
@@ -130,6 +130,43 @@ The QR code is `scd://link?token=<claimToken>&mode=<pull|push>`, the same as on 
 
 Keep the list and the open thread in sync with `CoreEvent.Sync` (changed conversations, read marks, request count), `Messages`, `Typing` and `Gone`.
 
+### Images, avatars and room backdrops
+
+Core seals every file. The app keeps the sealed bytes in its own files and does the presigned `PUT` and `GET` itself, straight to the given `url` with exactly the given `headers`, never through `ChatTransport`.
+
+| Call | Notes |
+|---|---|
+| `mediaConfig()` | `uploads`, `star`, `quota`, `used`, `limits`; no uploads until the first config |
+| `prepareImage(source)` | WebP up to 1600 px, sealed `image` and `thumb`, run off the main thread |
+| `prepareAvatar(source)` | group avatar: 512 px, sealed size up to 64 KiB, no thumb |
+| `prepareBackdrop(source)` | room backdrop: 1920 px, sealed size up to 600 KiB, no thumb, first frame only |
+
+`prepare*` answers `PreparedMedia`: the sealed `image` (and `thumb`), `w`, `h`, `thumbhash` (the placeholder) and `seal`, an opaque handle that keeps the key in Core. Write `image` and `thumb` to files, then queue them:
+
+1. `enqueueUpload(NewMediaUpload(album, position, conversationId, imageRef, thumbRef, seal))`: `thumbRef` exactly for an image. A room backdrop takes the room chat id. Answers `MediaUploadRow`.
+2. `reserveUpload(id)`: `PutTargets(expiresAt, image, thumb)`. Reserve again after `expiresAt`; the same row keeps its ids.
+3. `PUT` the image file. Report `uploadProgress(id, IMAGE, partsSent, stageId)` while it goes and `uploadObjectDone(id, IMAGE)` after it. An image then sends its thumb the same way (`THUMB`).
+4. `commitUpload(id)`. `MediaMissing` puts the row back on the missing object: `PUT` it again and commit. `NotFound` means the reserve expired: the row is `QUEUED` again.
+5. On a network error `uploadFailed(id, retryable = true)` and retry; `retryable = false` ends it as `FAILED`. `uploadRestart(id)` starts a row over, `uploadRedo(id, object)` sends one object again, `removeAlbumUploads(album)` cancels (delete the files it answers).
+
+`uploads()`, `upload(id)`, `albumUploads(album)` and `nextUpload()` read the queue; it survives app restarts. `CoreEvent.MediaUploads` carries every change, `removed` the cancelled ids.
+
+| Call | Notes |
+|---|---|
+| `sendAlbum(SendInput, album)` | posts the album once every upload of it is `COMMITTED` (`NotReady` before); up to 10 images, 4 in a room |
+| `setGroupAvatar(id, AvatarChange.Set(uploadId))` | a committed avatar upload of this group; `Clear` drops it. Rides a meta message |
+| `setRoomBackdrop(roomCode, roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it |
+| `setRoomPreset(roomCode, roomChatId, presetId)` | a bundled preset; also clears an uploaded backdrop |
+| `roomBackdrop(roomChatId)` | the uploaded backdrop the latest room meta carries, as `MediaInfo`, or `null` |
+| `mediaInfo(conversationId, mediaId)` | size, `w`, `h`, `thumbhash` and the thumb id of an album image, a group avatar or a room backdrop |
+| `mediaUrls(conversationId, ids)` | presigned `GET` urls, 15 min; `DELETED` shows "Картинка удалена", `LOST` "Картинка недоступна" |
+| `openImage(conversationId, mediaId, ciphertext)` | checks and decrypts the downloaded bytes: `OpenedMedia(bytes, mime, w, h)`, JPEG or PNG |
+| `openThumb(conversationId, mediaId, ciphertext)` | the same for the thumb of an image (`mediaId` is the image id) |
+| `mediaUsage()`, `mediaMine(MineQuery)` | storage: quota, per chat, own files |
+| `deleteMedia(MediaSelection)`, `restoreMedia(MediaSelection)` | delete for everyone in every chat; restore within 15 s |
+
+The room view (`backdrop` in the room state) decides what to draw. For `{"kind": "image", "mediaId"}` resolve it with `mediaInfo(roomChatId, mediaId)`, fetch it with `mediaUrls(roomChatId, [mediaId])` and open it with `openImage`; `null` from `mediaInfo` means the key has not arrived: draw the cover. When the room meta changes, `CoreEvent.Sync` brings the room summary with the new `avatarMediaId`: resolve again then. A 404 on a `GET` asks `mediaUrls` once more, then shows the placeholder.
+
 ### Devices
 
 | Call | Notes |
@@ -144,7 +181,7 @@ Keep the list and the open thread in sync with `CoreEvent.Sync` (changed convers
 
 ### Errors
 
-Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
+Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. Media adds `QuotaExceeded(used, quota)`, `MediaStarRequired`, `RoomStarRequired`, `MediaUploadsPaused` and `MediaMissing(ids)`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
 
 ## Storage
 

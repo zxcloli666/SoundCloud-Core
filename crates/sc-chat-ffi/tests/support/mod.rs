@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
@@ -5,7 +7,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use sc_chat::{CoreEvent, KeyName, Tier, TransportRequest, TransportResponse};
+use image::codecs::jpeg::JpegEncoder;
+use image::{ExtendedColorType, ImageEncoder, Rgb, RgbImage};
+use sc_chat::store::Store;
+use sc_chat::{
+    ChatError, CoreEvent, KeyName, MediaUploadsEvent, Tier, TransportRequest, TransportResponse,
+};
 use sc_chat_ffi::{
     ChatClient, ChatKeys, ChatListener, ChatSetup, ChatTransport, KeyFailure, NetFailure,
 };
@@ -83,6 +90,20 @@ impl Recorder {
     }
 }
 
+impl Recorder {
+    pub fn uploads(&self) -> Vec<MediaUploadsEvent> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                CoreEvent::MediaUploads(uploads) => Some(uploads.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
 impl ChatListener for Recorder {
     fn on_event(&self, event: CoreEvent) {
         self.0.lock().unwrap().push(event);
@@ -121,6 +142,26 @@ impl Rig {
     }
 }
 
+impl Rig {
+    pub async fn with_store(&self) {
+        self.client.set_session(Some("session".into()));
+        let started = Instant::now();
+        while settle(self.client.uploads()).await.err() == Some(ChatError::NotReady) {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "the store opens"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    pub fn side_store(&self) -> Store {
+        let key = self.keys.load(KeyName::Database).unwrap().unwrap();
+        let master: [u8; 32] = key.try_into().unwrap();
+        Store::open(&self.dir.join("chat.db"), &master).unwrap()
+    }
+}
+
 impl Drop for Rig {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.dir);
@@ -139,4 +180,60 @@ pub async fn settle<F: Future>(work: F) -> F::Output {
     tokio::time::timeout(Duration::from_secs(10), work)
         .await
         .expect("the call answers")
+}
+
+pub fn jpeg(w: u32, h: u32) -> Vec<u8> {
+    let photo = RgbImage::from_fn(w, h, |x, y| {
+        Rgb([(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8])
+    });
+    let mut out = Vec::new();
+    JpegEncoder::new_with_quality(&mut out, 90)
+        .write_image(&photo, w, h, ExtendedColorType::Rgb8)
+        .unwrap();
+    out
+}
+
+pub fn summary(id: uuid::Uuid, kind: sc_chat::ConversationKind) -> sc_chat::ConversationSummary {
+    sc_chat::ConversationSummary {
+        id,
+        kind,
+        title: None,
+        avatar_url: None,
+        avatar_media_id: None,
+        peer: None,
+        role: sc_chat::MemberRole::Member,
+        state: sc_chat::MemberState::Active,
+        accepted: true,
+        member_count: 3,
+        last_seq: 0,
+        last_at: 0,
+        last_read_seq: 0,
+        unread: 0,
+        mentions: 0,
+        preview: None,
+        muted_until: None,
+        notify: sc_chat::NotifyLevel::All,
+        pinned_at: None,
+        archived: false,
+        ttl_s: None,
+        room_code: None,
+        history_locked: false,
+        has_draft: false,
+    }
+}
+
+pub fn committed(store: &Store, id: uuid::Uuid, media: u128, thumb: Option<u128>) {
+    let reserved = sc_chat::store::Reserved {
+        media_id: uuid::Uuid::from_u128(media),
+        thumb_media_id: thumb.map(uuid::Uuid::from_u128),
+        presign_expires_at: i64::MAX,
+    };
+    store.upload_reserved(id, &reserved, 1).unwrap();
+    store
+        .upload_object_done(id, sc_chat::UploadObject::Image, 2)
+        .unwrap();
+    store
+        .upload_object_done(id, sc_chat::UploadObject::Thumb, 3)
+        .unwrap();
+    store.upload_committed(id, 4).unwrap();
 }
