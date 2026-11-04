@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 
 use super::cipher::{Blob, Role, seal_blob};
 use super::ladder::{self, Encoded, encode, fit_side};
-use super::{AVATAR_SIDE, IMAGE_SIDE, MIME_WEBP, MediaError, source};
+use super::{AVATAR_SIDE, BACKDROP_SIDE, IMAGE_SIDE, MIME_WEBP, MediaError, source};
 
 const THUMBHASH_SIDE: u32 = 100;
 
@@ -16,6 +16,11 @@ pub struct PreparedImage {
 }
 
 pub struct PreparedAvatar {
+    pub image: Vec<u8>,
+    pub attachment: Attachment,
+}
+
+pub struct PreparedBackdrop {
     pub image: Vec<u8>,
     pub attachment: Attachment,
 }
@@ -46,6 +51,16 @@ pub fn prepare_avatar(bytes: &[u8]) -> Result<PreparedAvatar, MediaError> {
     let image = encode(&base, &ladder::AVATAR)?;
     let image_blob = seal_blob(Role::Image, &image.webp)?;
     Ok(PreparedAvatar {
+        attachment: attachment(&base, &image, &image_blob, None),
+        image: image_blob.ciphertext,
+    })
+}
+
+pub fn prepare_backdrop(bytes: &[u8]) -> Result<PreparedBackdrop, MediaError> {
+    let base = base(bytes, BACKDROP_SIDE)?;
+    let image = encode(&base, &ladder::BACKDROP)?;
+    let image_blob = seal_blob(Role::Image, &image.webp)?;
+    Ok(PreparedBackdrop {
         attachment: attachment(&base, &image, &image_blob, None),
         image: image_blob.ciphertext,
     })

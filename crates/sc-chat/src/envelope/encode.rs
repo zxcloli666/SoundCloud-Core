@@ -65,7 +65,7 @@ fn meta_envelope(meta: &ConversationMeta) -> ChatResult<Envelope> {
     if meta
         .avatar
         .as_ref()
-        .is_some_and(|avatar| !attachments::avatar_ok(avatar))
+        .is_some_and(|avatar| !attachments::meta_image_ok(avatar))
     {
         return Err(ChatError::Invalid);
     }

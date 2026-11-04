@@ -57,7 +57,8 @@ pub struct Reserved {
 
 impl Store {
     pub fn enqueue_upload(&self, upload: &NewUpload, now: Millis) -> ChatResult<Uuid> {
-        if (upload.kind == MediaKind::Image) != upload.thumb_ref.is_some() {
+        let image = upload.kind == MediaKind::Image;
+        if image != upload.thumb_ref.is_some() || image != upload.attachment.thumb.is_some() {
             return Err(ChatError::Invalid);
         }
         let id = Uuid::new_v4();
@@ -185,7 +186,7 @@ impl Store {
         match object {
             UploadObject::Image => self.touch(
                 id,
-                "UPDATE media_uploads SET state = CASE kind WHEN 'avatar' THEN 'uploaded' ELSE 'uploading' END, object = CASE kind WHEN 'avatar' THEN 'image' ELSE 'thumb' END, parts_sent = 0, stage_id = NULL, updated_at = ?2 WHERE id = ?1 AND state IN ('reserved', 'uploading')",
+                "UPDATE media_uploads SET state = CASE kind WHEN 'image' THEN 'uploading' ELSE 'uploaded' END, object = CASE kind WHEN 'image' THEN 'thumb' ELSE 'image' END, parts_sent = 0, stage_id = NULL, updated_at = ?2 WHERE id = ?1 AND state IN ('reserved', 'uploading')",
                 params![id.as_bytes(), now],
             ),
             UploadObject::Thumb => self.touch(

@@ -1,11 +1,8 @@
-use std::io::Write;
 use std::time::Duration;
 
-use flate2::Compression;
-use flate2::write::ZlibEncoder;
 use sc_chat::media::{
-    BLOCK, MediaError, MediaWorker, Role, open_blob, open_image, open_thumb, prepare_image,
-    seal_blob,
+    BLOCK, MediaError, MediaWorker, Role, open_blob, open_image, open_thumb, prepare_backdrop,
+    prepare_image, seal_blob,
 };
 use sc_chat::sc_chat_wire::proto::Attachment;
 
@@ -281,89 +278,23 @@ fn padding_hides_the_length_in_4k_steps() {
     assert_eq!(&back[..], &[7; 10]);
 }
 
-fn png_bomb(w: u32, h: u32) -> Vec<u8> {
-    let chunk = |kind: &[u8; 4], data: &[u8], out: &mut Vec<u8>| {
-        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-        let mut body = kind.to_vec();
-        body.extend_from_slice(data);
-        out.extend_from_slice(&body);
-        out.extend_from_slice(&crc32fast::hash(&body).to_be_bytes());
-    };
-    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
-    let mut header = Vec::new();
-    header.extend_from_slice(&w.to_be_bytes());
-    header.extend_from_slice(&h.to_be_bytes());
-    header.extend_from_slice(&[1, 0, 0, 0, 0]);
-    chunk(b"IHDR", &header, &mut out);
-    let row = vec![0u8; (w as usize).div_ceil(8) + 1];
-    let mut zlib = ZlibEncoder::new(Vec::new(), Compression::best());
-    for _ in 0..h.min(4000) {
-        zlib.write_all(&row).unwrap();
+#[test]
+fn a_real_backdrop_cut_or_flipped_never_opens() {
+    let prepared = prepare_backdrop(&jpeg(&photo(2400, 1350))).unwrap();
+    let attachment = &prepared.attachment;
+    let worker = worker();
+    assert!(open_image(&worker, &prepared.image, attachment).is_ok());
+    let step = (prepared.image.len() / 40).max(1);
+    for length in (0..prepared.image.len()).step_by(step) {
+        assert!(open_image(&worker, &prepared.image[..length], attachment).is_err());
     }
-    chunk(b"IDAT", &zlib.finish().unwrap(), &mut out);
-    chunk(b"IEND", &[], &mut out);
-    out
-}
-
-#[test]
-fn a_png_decompression_bomb_is_refused_on_the_sender_side() {
-    let bomb = png_bomb(40_000, 40_000);
-    assert!(bomb.len() < 200_000);
-    assert_eq!(prepare_image(&bomb).err(), Some(MediaError::Dimensions));
-}
-
-#[test]
-fn a_jpeg_with_a_huge_frame_header_is_refused() {
-    let mut bytes = jpeg(&photo(32, 32));
-    let sof = bytes
-        .windows(2)
-        .position(|pair| pair == [0xFF, 0xC0])
-        .unwrap();
-    bytes[sof + 5..sof + 7].copy_from_slice(&60_000u16.to_be_bytes());
-    bytes[sof + 7..sof + 9].copy_from_slice(&60_000u16.to_be_bytes());
-    assert_eq!(prepare_image(&bytes).err(), Some(MediaError::Dimensions));
-}
-
-#[test]
-fn a_gif_with_a_huge_screen_never_panics_or_allocates_it() {
-    let mut out = Vec::new();
-    {
-        let mut encoder = image::codecs::gif::GifEncoder::new(&mut out);
-        let frame = image::Frame::new(image::RgbaImage::from_pixel(
-            8,
-            8,
-            image::Rgba([1, 2, 3, 255]),
-        ));
-        encoder.encode_frame(frame).unwrap();
-    }
-    out[6..8].copy_from_slice(&65_535u16.to_le_bytes());
-    out[8..10].copy_from_slice(&65_535u16.to_le_bytes());
-    let _ = prepare_image(&out);
-}
-
-#[test]
-fn an_oversized_file_is_refused_before_decoding() {
-    let mut bytes = jpeg(&photo(16, 16));
-    bytes.resize(49 * 1024 * 1024, 0);
-    assert_eq!(prepare_image(&bytes).err(), Some(MediaError::TooLarge));
-}
-
-#[test]
-fn damaged_sources_never_panic() {
-    let sources = [
-        jpeg(&photo(90, 60)),
-        png(&translucent(80, 50)),
-        lossy_webp(70, 50),
-    ];
-    for source in sources {
-        for round in 0..150u32 {
-            let mut damaged = source.clone();
-            let at = hash(round, 3) as usize % damaged.len();
-            damaged[at] ^= 1 << (hash(round, 4) % 8);
-            if round % 5 == 0 {
-                damaged.truncate(at.max(1));
-            }
-            let _ = prepare_image(&damaged);
-        }
+    for round in 0..40u32 {
+        let mut flipped = prepared.image.clone();
+        let at = hash(round, 5) as usize % flipped.len();
+        flipped[at] ^= 1 << (hash(round, 6) % 8);
+        assert_eq!(
+            open_image(&worker, &flipped, attachment).err(),
+            Some(MediaError::Mismatch)
+        );
     }
 }

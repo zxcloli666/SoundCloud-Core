@@ -207,6 +207,15 @@ impl Local for MemoryLocal {
         Ok(())
     }
 
+    fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {
+        let mut data = self.data.lock().unwrap();
+        match meta {
+            Some(meta) => data.group_meta.insert(id, meta.clone()),
+            None => data.group_meta.remove(&id),
+        };
+        Ok(())
+    }
+
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>> {
         let data = self.data.lock().unwrap();
         Ok(ids

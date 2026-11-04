@@ -1,4 +1,6 @@
 mod avatar;
+mod backdrop;
+mod bombs;
 mod color;
 mod corpus;
 mod measure;

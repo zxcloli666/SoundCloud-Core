@@ -15,6 +15,7 @@ pub trait Local: Send + Sync {
     fn conversation(&self, id: ConvId) -> ChatResult<Option<ConversationSummary>>;
     fn put_conversations(&self, items: &[ConversationSummary]) -> ChatResult<()>;
     fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()>;
+    fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()>;
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>>;
     fn put_users(&self, users: &[UserRef]) -> ChatResult<()>;
     fn put_marks(&self, id: ConvId, marks: &[PeerMark]) -> ChatResult<()>;
@@ -79,6 +80,10 @@ impl Local for LocalStore {
 
     fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()> {
         self.store.put_group_meta(id, meta)
+    }
+
+    fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {
+        self.store.put_room_meta(id, meta)
     }
 
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>> {

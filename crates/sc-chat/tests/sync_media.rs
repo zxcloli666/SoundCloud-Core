@@ -1,91 +1,32 @@
 mod store_support;
 mod sync_support;
 
-use std::sync::Arc;
-
 use sc_chat::api::wire::{ConversationView, b64};
-use sc_chat::api::{Api, Identity};
-use sc_chat::channel::Channel;
-use sc_chat::crypto::{self, Ck, DeviceKeys, MessageAt};
+use sc_chat::crypto::{self, Ck, MessageAt};
 use sc_chat::envelope::{self, Content};
 use sc_chat::outbox::{Outbox, OutboxItem};
 use sc_chat::sc_chat_wire::prost::Message as _;
 use sc_chat::sc_chat_wire::proto::Envelope;
-use sc_chat::store::{NewUpload, Store, SyncState, UploadState};
-use sc_chat::sync::{PollPlan, SyncEngine};
-use sc_chat::{ConversationMeta, HistoryQuery, MediaKind, MessageClass, Tier};
+use sc_chat::store::{NewUpload, UploadState};
+use sc_chat::sync::PollPlan;
+use sc_chat::{ConversationMeta, HistoryQuery, MediaKind, MessageClass};
 use serde_json::{Value, json};
 use store_support::{avatar, image};
 use sync_support::fixtures::{answer, entry, summary, text, view};
-use sync_support::{DEVICE, ME, PEER, PEER_DEVICE, Recorder, START_MS, Server, TestClock};
+use sync_support::real::{CK, INC, Real, direct_plan};
+use sync_support::{PEER, PEER_DEVICE, START_MS};
 use uuid::Uuid;
 
-const INC: Uuid = Uuid::from_u128(0x1c);
 const A: Uuid = Uuid::from_u128(0xa);
-const CK: [u8; 32] = [7; 32];
-
-struct Real {
-    server: Arc<Server>,
-    events: Arc<Recorder>,
-    keys: Arc<DeviceKeys>,
-    engine: SyncEngine,
-}
 
 fn real() -> Real {
-    let clock = Arc::new(TestClock::at(START_MS));
-    let server = Arc::new(Server::new(&[Tier::Direct], clock.clone()));
-    let api = Arc::new(Api::with_exchange(
-        Arc::new(Channel::new(clock)),
-        server.clone(),
-        server.clone(),
-    ));
-    let keys = Arc::new(DeviceKeys::generate().unwrap());
-    api.set_identity(Some(Identity {
-        session_id: "session".into(),
-        device_id: DEVICE,
-        keys: keys.clone(),
-    }));
-    let store = Store::open_in_memory(&[9; 32]).unwrap();
-    store.set_me(ME).unwrap();
-    store
-        .set_sync_state(SyncState {
-            pos: 1,
-            inc: Some(INC),
-        })
-        .unwrap();
-    store.put_conversations(&[summary(A, 0)]).unwrap();
-    let events = Arc::new(Recorder::default());
-    let engine = SyncEngine::new(api, Arc::new(store), events.clone());
-    engine.set_user(Some(ME.into()));
-    let rig = Real {
-        server,
-        events,
-        keys,
-        engine,
-    };
-    let sealed = sc_chat::sc_chat_wire::ck::seal_for_device(
-        &rig.keys.box_public().unwrap(),
-        A.as_bytes(),
-        1,
-        DEVICE.as_bytes(),
-        &CK,
-        [5; 32],
-    )
-    .unwrap();
-    rig.server.json(
-        "GET",
-        &format!("/chat/conversations/{A}/keys"),
-        json!([{"epoch": 1, "sealed": b64::encode(&sealed)}]),
-    );
+    let rig = sync_support::real::real(&[summary(A, 0)]);
+    rig.serve_keys(A, &[1]);
     rig
 }
 
 fn plan() -> PollPlan {
-    PollPlan {
-        tier: Tier::Direct,
-        hold_ms: 0,
-        delay_ms: 0,
-    }
+    direct_plan()
 }
 
 fn peer_album(seq: i64, ids: &[u128]) -> Value {

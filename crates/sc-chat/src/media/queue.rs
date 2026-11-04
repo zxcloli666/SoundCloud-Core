@@ -45,7 +45,7 @@ pub fn reserve_request(upload: &MediaUpload) -> ChatResult<ReserveMedia> {
                 .ok_or(ChatError::Invalid)?
                 .size,
         ),
-        MediaKind::Avatar => None,
+        MediaKind::Avatar | MediaKind::Backdrop => None,
     };
     Ok(ReserveMedia {
         upload_id: upload.id,

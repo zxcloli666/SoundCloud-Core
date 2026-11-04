@@ -51,7 +51,8 @@ pub fn meta_to_wire(meta: &ConversationMeta) -> proto::Meta {
 }
 
 pub fn meta_from_wire(meta: proto::Meta, attachments: &[proto::Attachment]) -> ConversationMeta {
-    let avatar = filled(meta.avatar_media_id).and_then(|id| attachments::avatar(attachments, &id));
+    let avatar =
+        filled(meta.avatar_media_id).and_then(|id| attachments::meta_image(attachments, &id));
     ConversationMeta {
         title: meta.title,
         description: meta.description,

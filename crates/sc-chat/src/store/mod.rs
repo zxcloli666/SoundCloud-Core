@@ -1,4 +1,5 @@
 mod attachments;
+mod backdrop;
 mod ck;
 pub(crate) mod codec;
 mod content;

@@ -13,7 +13,13 @@ use crate::envelope::{self, Content};
 
 pub const RENDER_MAX: u32 = 200;
 
-fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
+pub(super) enum MetaRead {
+    Absent,
+    Locked,
+    Open(Box<ConversationMeta>),
+}
+
+pub(super) fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
     let avatar = meta.avatar.as_ref()?;
     Uuid::parse_str(&avatar.media_id).ok()
 }
@@ -89,7 +95,10 @@ impl<L: Local> SyncEngine<L> {
         view: &ConversationView,
         existing: Option<&ConversationSummary>,
     ) -> ChatResult<ConversationSummary> {
-        let meta = self.meta_of(view).await?;
+        let meta = match self.read_meta(view).await? {
+            MetaRead::Open(meta) => Some(*meta),
+            MetaRead::Absent | MetaRead::Locked => None,
+        };
         if let Some(meta) = &meta {
             self.store.put_group_meta(view.id, meta)?;
         }
@@ -120,22 +129,22 @@ impl<L: Local> SyncEngine<L> {
         }
     }
 
-    async fn meta_of(&self, view: &ConversationView) -> ChatResult<Option<ConversationMeta>> {
+    pub(super) async fn read_meta(&self, view: &ConversationView) -> ChatResult<MetaRead> {
         let (Some(meta_ct), Some(epoch)) = (&view.meta_ct, view.meta_epoch) else {
-            return Ok(None);
+            return Ok(MetaRead::Absent);
         };
         let Ok(epoch) = u32::try_from(epoch) else {
-            return Ok(None);
+            return Ok(MetaRead::Locked);
         };
         let Some(ck) = self.key(view.id, epoch).await? else {
-            return Ok(None);
+            return Ok(MetaRead::Locked);
         };
         let Ok(envelope) = self.cipher.open_meta(&ck, view.id, epoch, meta_ct) else {
-            return Ok(None);
+            return Ok(MetaRead::Locked);
         };
         Ok(match envelope::decode(&envelope) {
-            Ok(Content::Meta(meta)) => Some(meta),
-            _ => None,
+            Ok(Content::Meta(meta)) => MetaRead::Open(Box::new(meta)),
+            _ => MetaRead::Locked,
         })
     }
 

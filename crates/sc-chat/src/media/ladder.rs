@@ -29,6 +29,12 @@ pub(super) const AVATAR: Ladder = Ladder {
     cap: super::AVATAR_SERVER_CAP,
 };
 
+pub(super) const BACKDROP: Ladder = Ladder {
+    sides: &[1920, 1600, 1280, 1024],
+    qualities: &[60.0, 50.0, 40.0, 30.0],
+    cap: super::BACKDROP_SERVER_CAP,
+};
+
 pub(super) const THUMB: Ladder = Ladder {
     sides: &[320, 256, 192, 128],
     qualities: &[45.0, 35.0, 25.0, 15.0],

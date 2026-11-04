@@ -51,6 +51,7 @@ pub struct MineQuery {
 pub enum MediaKind {
     Image,
     Avatar,
+    Backdrop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,6 +78,17 @@ pub struct MessageAttachment {
     rename_all_fields = "camelCase"
 )]
 pub enum AvatarChange {
+    Set { upload_id: Uuid },
+    Clear,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum BackdropChange {
     Set { upload_id: Uuid },
     Clear,
 }

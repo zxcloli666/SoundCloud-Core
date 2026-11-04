@@ -7,7 +7,7 @@ use sc_chat::{
     ConversationKind, GoneMessage, MessageBody, MessageClass, MessagesOrigin, PreviewKind,
     SystemKind, Tier,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use sync_support::fixtures::{answer, card, entry, keys, post, summary, system, text, view};
 use sync_support::{ME, PEER, PEER_DEVICE, START_MS, rig};
 use uuid::Uuid;
@@ -564,7 +564,7 @@ async fn a_hidden_window_sends_no_focus() {
 const ROOM: Uuid = Uuid::from_u128(0xe);
 
 #[tokio::test]
-async fn a_room_chat_is_adopted_from_its_seat_and_never_asks_for_a_conversation_view() {
+async fn a_room_chat_is_adopted_from_its_seat_and_asks_for_its_view_only_for_the_meta() {
     let rig = rig();
     synced(&rig);
     rig.server.json(
@@ -572,6 +572,11 @@ async fn a_room_chat_is_adopted_from_its_seat_and_never_asks_for_a_conversation_
         &format!("/chat/conversations/{ROOM}/messages"),
         json!({"messages": [post(ROOM, 6, 1, "seated")], "more": false}),
     );
+    let mut room_view = view(ROOM, 6);
+    room_view["kind"] = json!("room");
+    room_view["peer"] = Value::Null;
+    rig.server
+        .json("GET", &format!("/chat/conversations/{ROOM}"), room_view);
     rig.server.json(
         "GET",
         &format!("/chat/conversations/{ROOM}/keys"),
@@ -604,10 +609,11 @@ async fn a_room_chat_is_adopted_from_its_seat_and_never_asks_for_a_conversation_
     );
     rig.engine.step(plan(&rig)).await.unwrap();
     assert_eq!(rig.local.summary(ROOM).unwrap().last_seq, 7);
-    assert!(
+    assert_eq!(
         rig.server
             .calls_to("GET", &format!("/chat/conversations/{ROOM}"))
-            .is_empty()
+            .len(),
+        1
     );
 }
 

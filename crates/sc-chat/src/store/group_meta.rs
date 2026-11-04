@@ -58,15 +58,28 @@ impl Store {
             None => {}
             Some(AvatarChange::Clear) => next.avatar = None,
             Some(AvatarChange::Set { upload_id }) => {
-                next.avatar = Some(self.committed_avatar(id, upload_id)?);
+                next.avatar = Some(self.committed_upload(id, upload_id, MediaKind::Avatar)?);
             }
         }
         Ok(next)
     }
 
-    fn committed_avatar(&self, id: ConvId, upload_id: Uuid) -> ChatResult<Attachment> {
+    pub(super) fn drop_group_meta(&self, id: ConvId) -> ChatResult<()> {
+        self.conn()?.execute(
+            "DELETE FROM group_meta WHERE conversation_id = ?1",
+            [id.as_bytes()],
+        )?;
+        Ok(())
+    }
+
+    pub(super) fn committed_upload(
+        &self,
+        id: ConvId,
+        upload_id: Uuid,
+        kind: MediaKind,
+    ) -> ChatResult<Attachment> {
         let upload = self.upload(upload_id)?.ok_or(ChatError::NotFound)?;
-        let ready = upload.kind == MediaKind::Avatar
+        let ready = upload.kind == kind
             && upload.state == UploadState::Committed
             && upload.conversation_id == id;
         match ready {

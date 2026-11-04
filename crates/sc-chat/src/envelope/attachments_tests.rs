@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{Content, Post, decode, encode};
 use crate::contracts::{ChatError, ConversationMeta, RichText};
-use crate::media::{ALBUM_MAX, AVATAR_SERVER_CAP};
+use crate::media::{ALBUM_MAX, BACKDROP_SERVER_CAP};
 
 fn image(n: u128) -> Attachment {
     Attachment {
@@ -123,9 +123,28 @@ fn a_group_avatar_rides_the_meta_envelope() {
 }
 
 #[test]
-fn an_avatar_with_a_thumb_or_too_big_is_refused() {
+fn a_room_backdrop_up_to_its_cap_rides_the_meta_envelope() {
+    let mut backdrop = avatar(5);
+    backdrop.size = BACKDROP_SERVER_CAP as u64;
+    backdrop.w = 1920;
+    backdrop.h = 1080;
+    let meta = ConversationMeta {
+        title: String::new(),
+        description: String::new(),
+        avatar: Some(backdrop.clone()),
+    };
+    let envelope = encode(&Content::Meta(meta.clone())).unwrap();
+    assert_eq!(envelope.attachments, vec![backdrop]);
+    assert_eq!(
+        round_trip(&Content::Meta(meta.clone())),
+        Content::Meta(meta)
+    );
+}
+
+#[test]
+fn a_meta_image_with_a_thumb_or_too_big_is_refused() {
     let mut big = avatar(5);
-    big.size = AVATAR_SERVER_CAP as u64 + 1;
+    big.size = BACKDROP_SERVER_CAP as u64 + 1;
     for bad in [image(5), big] {
         let meta = ConversationMeta {
             title: "t".into(),

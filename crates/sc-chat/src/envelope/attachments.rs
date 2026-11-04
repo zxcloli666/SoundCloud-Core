@@ -2,7 +2,7 @@ use sc_chat_wire::proto::{Attachment, AttachmentKind as WireKind, Thumb};
 use uuid::Uuid;
 
 use crate::contracts::{AttachmentKind, MessageAttachment};
-use crate::media::{ALBUM_MAX, AVATAR_SERVER_CAP, IMAGE_CAP, THUMB_SERVER_CAP};
+use crate::media::{ALBUM_MAX, BACKDROP_SERVER_CAP, IMAGE_CAP, THUMB_SERVER_CAP};
 
 const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 24;
@@ -17,11 +17,11 @@ pub fn album(attachments: &[Attachment]) -> Vec<Attachment> {
         .collect()
 }
 
-pub fn avatar(attachments: &[Attachment], media_id: &str) -> Option<Attachment> {
+pub fn meta_image(attachments: &[Attachment], media_id: &str) -> Option<Attachment> {
     attachments
         .iter()
         .find(|attachment| attachment.media_id == media_id)
-        .filter(|attachment| avatar_ok(attachment))
+        .filter(|attachment| meta_image_ok(attachment))
         .cloned()
 }
 
@@ -40,8 +40,8 @@ pub fn image_ok(attachment: &Attachment) -> bool {
     sealed_ok(attachment, IMAGE_CAP) && attachment.thumb.as_ref().is_some_and(thumb_ok)
 }
 
-pub fn avatar_ok(attachment: &Attachment) -> bool {
-    sealed_ok(attachment, AVATAR_SERVER_CAP) && attachment.thumb.is_none()
+pub fn meta_image_ok(attachment: &Attachment) -> bool {
+    sealed_ok(attachment, BACKDROP_SERVER_CAP) && attachment.thumb.is_none()
 }
 
 fn sealed_ok(attachment: &Attachment, cap: usize) -> bool {

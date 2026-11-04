@@ -81,6 +81,7 @@ impl<L: Local> SyncEngine<L> {
         conversation_id: ConvId,
         views: &[MessageView],
     ) -> ChatResult<Vec<Message>> {
+        self.note_room_meta(conversation_id, views)?;
         let stored = self.store_rows(conversation_id, views).await?;
         self.rendered(conversation_id, &stored)
     }
