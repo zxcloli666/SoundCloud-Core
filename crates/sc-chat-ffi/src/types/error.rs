@@ -34,6 +34,9 @@ pub enum ChatError {
     },
     MediaStarRequired,
     RoomStarRequired,
+    BackdropCooldown {
+        until: Millis,
+    },
     MediaUploadsPaused,
     MediaMissing {
         ids: Vec<Uuid>,

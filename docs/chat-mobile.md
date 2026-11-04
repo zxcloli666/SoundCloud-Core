@@ -155,7 +155,7 @@ Core seals every file. The app keeps the sealed bytes in its own files and does 
 |---|---|
 | `sendAlbum(SendInput, album)` | posts the album once every upload of it is `COMMITTED` (`NotReady` before); up to 10 images, 4 in a room |
 | `setGroupAvatar(id, AvatarChange.Set(uploadId))` | a committed avatar upload of this group; `Clear` drops it. Rides a meta message |
-| `setRoomBackdrop(roomCode, roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it |
+| `setRoomBackdrop(roomCode, roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it. `BackdropCooldown(until)`: an image was taken down by reports, no new image until then |
 | `setRoomPreset(roomCode, roomChatId, presetId)` | a bundled preset; also clears an uploaded backdrop |
 | `reportBackdrop(BackdropReport(conversationId, mediaId, reason, comment))` | a member reports the room backdrop on screen, never the host; comment up to 500 chars. `MediaMissing` means the room shows another backdrop now |
 | `roomBackdrop(roomChatId)` | the uploaded backdrop the latest room meta carries, as `MediaInfo`, or `null` |
@@ -182,7 +182,7 @@ The room view (`backdrop` in the room state) decides what to draw. For `{"kind":
 
 ### Errors
 
-Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. Media adds `QuotaExceeded(used, quota)`, `MediaStarRequired`, `RoomStarRequired`, `MediaUploadsPaused` and `MediaMissing(ids)`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
+Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. Media adds `QuotaExceeded(used, quota)`, `MediaStarRequired`, `RoomStarRequired`, `BackdropCooldown(until)`, `MediaUploadsPaused` and `MediaMissing(ids)`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
 
 ## Storage
 

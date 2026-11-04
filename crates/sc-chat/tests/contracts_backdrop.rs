@@ -1,5 +1,5 @@
 use sc_chat::api::wire::RoomPreviewView;
-use sc_chat::{BackdropChange, MediaKind, RoomBackdrop, RoomPreview, RoomSettingsPatch};
+use sc_chat::{BackdropChange, ChatError, MediaKind, RoomBackdrop, RoomPreview, RoomSettingsPatch};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -125,4 +125,16 @@ fn an_invite_preview_shows_a_preset_and_never_an_image() {
     let shown =
         serde_json::to_value(preview(Some(json!({"kind": "preset", "id": "satin"})))).unwrap();
     assert_eq!(shown["backdrop"], json!({"kind": "preset", "id": "satin"}));
+}
+
+#[test]
+fn a_paused_room_backdrop_keeps_its_end_and_reaches_the_webview() {
+    let until = 1_793_820_000_000i64;
+    let paused =
+        ChatError::from_server(&json!({"error": "chat_backdrop_cooldown", "until": until}));
+    assert_eq!(paused, ChatError::BackdropCooldown { until });
+    assert_eq!(
+        serde_json::to_value(&paused).unwrap(),
+        json!({"code": "backdrop_cooldown", "until": until})
+    );
 }
