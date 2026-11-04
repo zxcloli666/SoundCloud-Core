@@ -1,31 +1,14 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use sc_chat::media::{AVATAR_SERVER_CAP, BLOCK, MediaWorker, open_image, prepare_avatar};
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject, UploadState};
-use sc_chat::{ChatError, CoreEvent, Events, MediaKind, MediaUploadsEvent};
+use sc_chat::{ChatError, MediaKind};
 use uuid::Uuid;
 
 use crate::support::*;
 
 const CONVERSATION: Uuid = Uuid::from_u128(0xc0);
 const AVATAR_ID: Uuid = Uuid::from_u128(0x3a);
-
-#[derive(Default)]
-struct Seen(Mutex<Vec<MediaUploadsEvent>>);
-
-impl Events for Seen {
-    fn emit(&self, event: CoreEvent) {
-        if let CoreEvent::MediaUploads(uploads) = event {
-            self.0.lock().unwrap().push(uploads);
-        }
-    }
-}
-
-impl Seen {
-    fn take(&self) -> Vec<MediaUploadsEvent> {
-        std::mem::take(&mut *self.0.lock().unwrap())
-    }
-}
 
 fn avatar_upload() -> NewUpload {
     let prepared = prepare_avatar(&jpeg(&photo(64, 64))).unwrap();

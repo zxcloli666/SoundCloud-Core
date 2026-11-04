@@ -2,6 +2,25 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder, Rgb, RgbImage, Rgba, RgbaImage};
 use sc_chat::media::{Role, seal_blob};
 use sc_chat::sc_chat_wire::proto::{Attachment, Thumb};
+use sc_chat::{CoreEvent, Events, MediaUploadsEvent};
+use std::sync::Mutex;
+
+#[derive(Default)]
+pub struct Seen(Mutex<Vec<MediaUploadsEvent>>);
+
+impl Events for Seen {
+    fn emit(&self, event: CoreEvent) {
+        if let CoreEvent::MediaUploads(uploads) = event {
+            self.0.lock().unwrap().push(uploads);
+        }
+    }
+}
+
+impl Seen {
+    pub fn take(&self) -> Vec<MediaUploadsEvent> {
+        std::mem::take(&mut *self.0.lock().unwrap())
+    }
+}
 
 pub const SECRET: &[u8] = b"SECRET-GPS-48.8566N";
 

@@ -147,7 +147,7 @@ Core seals every file. The app keeps the sealed bytes in its own files and does 
 2. `reserveUpload(id)`: `PutTargets(expiresAt, image, thumb)`. Reserve again after `expiresAt`; the same row keeps its ids.
 3. `PUT` the image file. Report `uploadProgress(id, IMAGE, partsSent, stageId)` while it goes and `uploadObjectDone(id, IMAGE)` after it. An image then sends its thumb the same way (`THUMB`).
 4. `commitUpload(id)`. `MediaMissing` puts the row back on the missing object: `PUT` it again and commit. `NotFound` means the reserve expired: the row is `QUEUED` again.
-5. On a network error `uploadFailed(id, retryable = true)` and retry; `retryable = false` ends it as `FAILED`. `uploadRestart(id)` starts a row over, `uploadRedo(id, object)` sends one object again, `removeAlbumUploads(album)` cancels (delete the files it answers).
+5. On a network error `uploadFailed(id, retryable = true)` and retry; `retryable = false` ends it as `FAILED`. `uploadRestart(id)` starts a row over, `uploadRedo(id, object)` sends one object again, `removeAlbumUploads(album)` cancels an album and `removeUpload(id)` one row of it (delete the files they answer; `null` when the row is already gone).
 
 `uploads()`, `upload(id)`, `albumUploads(album)` and `nextUpload()` read the queue; it survives app restarts. `CoreEvent.MediaUploads` carries every change, `removed` the cancelled ids.
 

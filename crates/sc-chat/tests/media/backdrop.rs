@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use sc_chat::MediaKind;
 use sc_chat::media::{BACKDROP_SERVER_CAP, BLOCK, MediaWorker, open_image, prepare_backdrop};
 use sc_chat::store::{NewUpload, Store, UploadObject, UploadState};
-use sc_chat::{CoreEvent, Events, MediaKind, MediaUploadsEvent};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::support::*;
@@ -87,17 +87,6 @@ fn an_animated_webp_backdrop_keeps_its_first_frame_only() {
     assert!(pixel[0] > 200 && pixel[2] < 60, "{pixel:?}");
 }
 
-#[derive(Default)]
-struct Seen(Mutex<Vec<MediaUploadsEvent>>);
-
-impl Events for Seen {
-    fn emit(&self, event: CoreEvent) {
-        if let CoreEvent::MediaUploads(uploads) = event {
-            self.0.lock().unwrap().push(uploads);
-        }
-    }
-}
-
 #[test]
 fn a_backdrop_upload_is_one_object_from_queue_to_commit() {
     let store = Store::open_in_memory(&[5; 32]).unwrap();
@@ -146,11 +135,9 @@ fn a_backdrop_upload_is_one_object_from_queue_to_commit() {
     assert_eq!(done.attachment.media_id, Uuid::from_u128(0x61).to_string());
     assert_eq!(done.attachment.key, prepared.attachment.key);
     let views: Vec<_> = seen
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .flat_map(|event| event.uploads.clone())
+        .take()
+        .into_iter()
+        .flat_map(|event| event.uploads)
         .map(|view| (view.kind, view.state, view.thumb_bytes))
         .collect();
     assert_eq!(

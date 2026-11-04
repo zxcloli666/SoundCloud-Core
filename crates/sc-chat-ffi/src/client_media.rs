@@ -94,6 +94,11 @@ impl ChatClient {
             .await
     }
 
+    pub async fn remove_upload(&self, id: Uuid) -> Result<Option<MediaUploadRow>, ChatError> {
+        self.run(|chat| async move { chat.remove_upload(id).await })
+            .await
+    }
+
     pub async fn upload(&self, id: Uuid) -> Result<Option<MediaUploadRow>, ChatError> {
         self.run(|chat| async move { chat.upload(id).await }).await
     }

@@ -197,6 +197,21 @@ impl Store {
         Ok(removed)
     }
 
+    pub fn remove_upload(&self, id: Uuid) -> ChatResult<Option<MediaUpload>> {
+        let removed = {
+            let mut conn = self.conn()?;
+            let tx = conn.transaction()?;
+            let removed = load(&tx, &self.keys, "id = ?1", [id.as_bytes()])?.pop();
+            tx.execute("DELETE FROM media_uploads WHERE id = ?1", [id.as_bytes()])?;
+            tx.commit()?;
+            removed
+        };
+        if removed.is_some() {
+            self.uploads_removed(vec![id]);
+        }
+        Ok(removed)
+    }
+
     fn touch(&self, id: Uuid, sql: &str, params: impl rusqlite::Params) -> ChatResult<()> {
         if self.conn()?.execute(sql, params)? > 0 {
             self.uploads_changed(&[id]);

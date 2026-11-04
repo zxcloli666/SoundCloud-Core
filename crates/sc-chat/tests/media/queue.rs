@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use sc_chat::media::prepare_image;
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject, UploadState};
@@ -277,6 +278,39 @@ fn an_album_survives_an_app_restart_with_its_keys_sealed() {
     assert!(store.album_uploads(album).unwrap().is_empty());
     drop(store);
     remove(&path);
+}
+
+#[test]
+fn one_upload_leaves_its_album_and_the_rest_stays_in_order() {
+    let store = Store::open_in_memory(&MASTER).unwrap();
+    let seen = Arc::new(Seen::default());
+    store.watch_uploads(Some(seen.clone()));
+    let album = Uuid::new_v4();
+    let ids: Vec<Uuid> = (0..3)
+        .map(|position| store.enqueue_upload(&upload(album, position), 1).unwrap())
+        .collect();
+    store.upload_reserved(ids[1], &reserved(), 2).unwrap();
+    seen.take();
+
+    let removed = store.remove_upload(ids[1]).unwrap().unwrap();
+    assert_eq!(removed.id, ids[1]);
+    assert_eq!(removed.image_ref, format!("media/{album}/1.img"));
+    assert_eq!(removed.media_id, Some(IMAGE_ID));
+    let left: Vec<(Uuid, u32)> = store
+        .album_uploads(album)
+        .unwrap()
+        .iter()
+        .map(|upload| (upload.id, upload.position))
+        .collect();
+    assert_eq!(left, vec![(ids[0], 0), (ids[2], 2)]);
+    let events = seen.take();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].removed, vec![ids[1]]);
+    assert!(events[0].uploads.is_empty());
+
+    assert_eq!(store.remove_upload(ids[1]).unwrap(), None);
+    assert!(seen.take().is_empty());
+    assert_eq!(store.next_upload().unwrap().unwrap().id, ids[0]);
 }
 
 #[test]

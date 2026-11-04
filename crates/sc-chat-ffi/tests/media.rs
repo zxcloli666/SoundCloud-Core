@@ -173,3 +173,49 @@ async fn a_backdrop_upload_walks_the_queue_and_survives_a_failed_reserve() {
     );
     assert_eq!(events.last().unwrap().removed, vec![row.id]);
 }
+
+#[tokio::test]
+async fn one_upload_is_cancelled_and_its_album_keeps_the_rest() {
+    let rig = Rig::new();
+    rig.with_store().await;
+    let prepared = settle(rig.client.prepare_backdrop(jpeg(64, 48)))
+        .await
+        .unwrap();
+    let album = Uuid::new_v4();
+    let first = settle(rig.client.enqueue_upload(upload(&prepared, album, None)))
+        .await
+        .unwrap();
+    let second = settle(rig.client.enqueue_upload(NewMediaUpload {
+        position: 1,
+        image_ref: "media/b.img".into(),
+        ..upload(&prepared, album, None)
+    }))
+    .await
+    .unwrap();
+
+    let removed = settle(rig.client.remove_upload(second.id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (removed.id, removed.image_ref),
+        (second.id, "media/b.img".into())
+    );
+    assert_eq!(
+        settle(rig.client.album_uploads(album)).await.unwrap(),
+        vec![first]
+    );
+    assert_eq!(
+        settle(rig.client.remove_upload(second.id)).await.unwrap(),
+        None
+    );
+    let events = rig.events.uploads();
+    assert_eq!(events.last().unwrap().removed, vec![second.id]);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| !event.removed.is_empty())
+            .count(),
+        1
+    );
+}

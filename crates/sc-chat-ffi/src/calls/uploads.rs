@@ -97,6 +97,11 @@ impl Chat {
             .await
     }
 
+    pub async fn remove_upload(&self, id: Uuid) -> ChatResult<Option<MediaUploadRow>> {
+        self.blocking(move |core| Ok(core.store.remove_upload(id)?.map(MediaUploadRow::from)))
+            .await
+    }
+
     pub async fn upload(&self, id: Uuid) -> ChatResult<Option<MediaUploadRow>> {
         self.blocking(move |core| Ok(core.store.upload(id)?.map(MediaUploadRow::from)))
             .await
