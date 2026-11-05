@@ -4,6 +4,7 @@ pub mod ck;
 mod error;
 pub mod msg;
 pub mod ock;
+pub mod pow;
 pub mod proto;
 mod random;
 pub mod seal;

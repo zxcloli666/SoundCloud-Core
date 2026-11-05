@@ -1,3 +1,5 @@
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -36,6 +38,8 @@ pub enum ChatError {
     Busy { retry_ms: u64 },
     #[error("the clock is off, server time {server_now}")]
     Clock { server_now: Millis },
+    #[error("the server asks for a proof of work, effort {effort}")]
+    PowRequired { seed: Vec<u8>, effort: u32 },
     #[error("the request was replayed")]
     Replay,
     #[error("this device was revoked")]
@@ -112,6 +116,7 @@ impl ChatError {
             "clock" => Self::Clock {
                 server_now: signed("server_now"),
             },
+            "pow_required" => pow_required(body),
             "replay" => Self::Replay,
             "device_revoked" => Self::DeviceRevoked,
             "relogin_required" => Self::ReloginRequired,
@@ -144,6 +149,23 @@ impl ChatError {
             Self::SlowMode { retry_ms } | Self::Busy { retry_ms } => Some(*retry_ms),
             _ => None,
         }
+    }
+}
+
+fn pow_required(body: &Value) -> ChatError {
+    let seed = body
+        .get("seed")
+        .and_then(Value::as_str)
+        .and_then(|seed| URL_SAFE_NO_PAD.decode(seed).ok())
+        .filter(|seed| seed.len() == 32);
+    let effort = body
+        .get("effort")
+        .and_then(Value::as_u64)
+        .and_then(|effort| u32::try_from(effort).ok())
+        .filter(|effort| *effort >= 1);
+    match (seed, effort) {
+        (Some(seed), Some(effort)) => ChatError::PowRequired { seed, effort },
+        _ => ChatError::Protocol,
     }
 }
 

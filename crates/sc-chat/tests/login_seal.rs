@@ -5,6 +5,8 @@ use sc_chat::channel::{InnerCall, Sealed};
 use sc_chat::crypto::DeviceKeys;
 use sc_chat::login::{LOGIN_MAX_BYTES, LOGIN_PATHS, is_login_path, seal_login};
 use sc_chat::sc_chat_wire::bind::verify_bind;
+use sc_chat::sc_chat_wire::pow::POW_V;
+use sc_chat::sc_chat_wire::proto::Pow;
 use sc_chat::sc_chat_wire::sign::verify_request;
 use sc_chat::{ChatError, Tier};
 use uuid::Uuid;
@@ -31,6 +33,7 @@ fn a_sealed_login_carries_a_bind_signed_by_the_device() {
         &call("/auth/link/create"),
         None,
         Tier::Relay,
+        None,
     )
     .unwrap();
     let received = origin.receive(&sealed.envelope);
@@ -65,6 +68,7 @@ fn a_relogin_names_the_session_it_binds() {
         &call("/auth/login"),
         Some(session),
         Tier::Pro,
+        None,
     )
     .unwrap();
     let inner = origin.receive(&sealed.envelope).inner;
@@ -82,6 +86,7 @@ fn seal_path(origin: &Origin, path: &str) -> Result<Sealed, ChatError> {
         &call(path),
         None,
         Tier::Direct,
+        None,
     )
 }
 
@@ -100,4 +105,42 @@ fn only_the_sealed_auth_paths_take_a_bind() {
             "{path}"
         );
     }
+}
+
+#[test]
+fn a_login_without_a_pow_carries_the_capability_marker() {
+    let origin = Origin::new();
+    let sealed = seal_path(&origin, "/auth/login").unwrap();
+    let pow = origin.receive(&sealed.envelope).inner.pow.unwrap();
+    assert_eq!(
+        pow,
+        Pow {
+            v: POW_V,
+            ..Pow::default()
+        }
+    );
+}
+
+#[test]
+fn a_login_carries_the_given_pow() {
+    let origin = Origin::new();
+    let keys = DeviceKeys::generate().unwrap();
+    let given = Pow {
+        v: POW_V,
+        seed: vec![3; 32],
+        effort: 5,
+        nonce: vec![4; 16],
+        solution: vec![5; 16],
+    };
+    let sealed = seal_login(
+        &origin.channel(),
+        &keys,
+        Uuid::new_v4(),
+        &call("/auth/login"),
+        None,
+        Tier::Direct,
+        Some(&given),
+    )
+    .unwrap();
+    assert_eq!(origin.receive(&sealed.envelope).inner.pow, Some(given));
 }

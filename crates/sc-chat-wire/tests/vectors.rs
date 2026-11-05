@@ -57,6 +57,7 @@ fn inner_of(case: &Value) -> Inner {
             .as_str()
             .map(|raw| Bind::decode(hex::decode(raw).expect("bind hex").as_slice()).expect("bind")),
         sig: Vec::new(),
+        pow: None,
     }
 }
 

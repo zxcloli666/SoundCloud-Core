@@ -17,6 +17,14 @@ message Bind {
   bytes sig = 5;
 }
 
+message Pow {
+  uint32 v = 1;
+  bytes seed = 2;
+  uint32 effort = 3;
+  bytes nonce = 4;
+  bytes solution = 5;
+}
+
 message Inner {
   uint64 ts_ms = 1;
   optional string session_id = 2;
@@ -29,6 +37,7 @@ message Inner {
   uint32 max_bytes = 9;
   Bind bind = 10;
   bytes sig = 11;
+  Pow pow = 12;
 }
 
 message Header {
