@@ -6,6 +6,7 @@ fn main() {
     let descriptors = protox::compile(files, ["proto"]).expect("chat protos compile");
     prost_build::Config::new()
         .boxed(".scd.chat.v1.Suggest.track")
+        .skip_debug([".scd.chat.v1.Attachment", ".scd.chat.v1.Thumb"])
         .compile_fds(descriptors)
         .expect("chat protos generate");
 }

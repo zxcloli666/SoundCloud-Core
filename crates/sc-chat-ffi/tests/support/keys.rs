@@ -9,6 +9,7 @@ use sc_chat_ffi::{ChatKeys, KeyFailure};
 pub struct MemoryKeys {
     secrets: Mutex<HashMap<KeyName, Vec<u8>>>,
     denied: AtomicBool,
+    unavailable: AtomicBool,
     calls: AtomicUsize,
 }
 
@@ -21,18 +22,27 @@ impl MemoryKeys {
         self.denied.store(denied, Ordering::SeqCst);
     }
 
+    pub fn break_down(&self, unavailable: bool) {
+        self.unavailable.store(unavailable, Ordering::SeqCst);
+    }
+
     pub fn calls(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
     }
 
     fn ask(&self) -> Result<(), KeyFailure> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        match self.denied.load(Ordering::SeqCst) {
-            true => Err(KeyFailure::Denied {
+        if self.denied.load(Ordering::SeqCst) {
+            return Err(KeyFailure::Denied {
                 reason: "the user pressed Deny".into(),
-            }),
-            false => Ok(()),
+            });
         }
+        if self.unavailable.load(Ordering::SeqCst) {
+            return Err(KeyFailure::Unavailable {
+                reason: "the keychain is locked".into(),
+            });
+        }
+        Ok(())
     }
 }
 

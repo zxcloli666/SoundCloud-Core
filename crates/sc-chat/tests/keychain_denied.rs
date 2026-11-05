@@ -114,6 +114,10 @@ fn the_denied_codes_are_stable_on_the_wire() {
         serde_json::json!("keychain_denied")
     );
     assert_eq!(
+        serde_json::to_value(ChatPhase::KeychainUnavailable).unwrap(),
+        serde_json::json!("keychain_unavailable")
+    );
+    assert_eq!(
         ChatError::from_server(&serde_json::json!({"error": "chat_unimplemented"})),
         ChatError::Protocol
     );

@@ -17,6 +17,7 @@ pub enum ChatPhase {
     Ready,
     Revoked,
     KeychainDenied,
+    KeychainUnavailable,
 }
 
 #[uniffi::remote(Enum)]

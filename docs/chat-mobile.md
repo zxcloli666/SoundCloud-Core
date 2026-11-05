@@ -7,7 +7,7 @@
 The `Chat mobile` workflow builds both packages on every push to `main` and on `sc-chat-ffi-v*` tags. Take them from the run of a tag:
 
 ```sh
-gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.0
+gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.1
 gh run download <run id> --repo zxcloli666/SoundCloud-Core
 ```
 
@@ -83,7 +83,7 @@ client.setVisible(visible: true)
 - `setVisible(true)` in the foreground, `false` in the background. Visible means long polls and fast delivery, hidden means one sync a minute.
 - `setFocus(conversationId)` while a thread is on screen, `setFocus(null)` when it closes.
 - `networkChanged()` after Wi-Fi, mobile data or VPN changes.
-- `retryKeychain()` when the user asks to try the keychain again; it does nothing outside `KEYCHAIN_DENIED`.
+- `retryKeychain()` when the user asks to try the keychain again; it does nothing outside `KEYCHAIN_DENIED` and `KEYCHAIN_UNAVAILABLE`.
 
 ### Status
 
@@ -98,6 +98,7 @@ client.setVisible(visible: true)
 | `REVOKED` | this device was removed, its data is gone: sealed relogin |
 | `OFF` | chat is off for this account |
 | `KEYCHAIN_DENIED` | the user refused the keychain: chat waits, no prompt comes back until `retryKeychain()` |
+| `KEYCHAIN_UNAVAILABLE` | the keychain fails without a refusal: chat retries on its own, up to once a minute; `retryKeychain()` tries at once |
 
 `history.locked` and `history.unlocksAt`: a new device reads old chats only after an older device confirms it or after 72 h.
 

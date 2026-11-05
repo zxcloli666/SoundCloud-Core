@@ -18,6 +18,7 @@ pub enum Halt {
     Restart,
     Phase(ChatPhase),
     Retry(Duration),
+    Wait(ChatPhase, Duration),
 }
 
 impl Chat {
@@ -110,6 +111,9 @@ impl Chat {
             ChatError::DeviceRevoked => Halt::Phase(ChatPhase::Revoked),
             ChatError::Disabled => Halt::Phase(ChatPhase::Off),
             ChatError::KeychainDenied => Halt::Phase(ChatPhase::KeychainDenied),
+            ChatError::Keychain => {
+                Halt::Wait(ChatPhase::KeychainUnavailable, retry::backoff(failures))
+            }
             ChatError::Busy { retry_ms } => Halt::Retry(retry::busy(*retry_ms)),
             ChatError::Clock { server_now } => {
                 self.api.channel().note_server_now(*server_now);
@@ -153,7 +157,18 @@ impl Chat {
                 self.feed.update(|status| status.online = false);
                 self.pause(pause, generation).await;
             }
+            Halt::Wait(phase, pause) => {
+                self.feed.update(|status| {
+                    status.phase = phase;
+                    status.online = false;
+                });
+                self.pause(pause, generation).await;
+            }
             Halt::Phase(phase) => {
+                let generation = match phase {
+                    ChatPhase::KeychainDenied => self.answered(generation, seen),
+                    _ => generation,
+                };
                 if signed_out(phase) {
                     self.forget_user();
                 }
@@ -161,13 +176,11 @@ impl Chat {
                     status.phase = phase;
                     status.online = false;
                 });
-                let generation = match phase {
-                    ChatPhase::Revoked => {
-                        let _ = self.wipe(true).await;
-                        generation + 1
-                    }
-                    ChatPhase::KeychainDenied => self.answered(generation, seen),
-                    _ => generation,
+                let generation = if phase == ChatPhase::Revoked {
+                    let _ = self.wipe(true).await;
+                    generation + 1
+                } else {
+                    generation
                 };
                 if phase == ChatPhase::Off {
                     let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);

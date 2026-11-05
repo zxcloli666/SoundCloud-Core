@@ -102,6 +102,7 @@ fn the_kotlin_bindings_carry_every_media_call() {
     );
     assert!(kotlin.contains("class KeychainDenied("));
     assert!(kotlin.contains("KEYCHAIN_DENIED"));
+    assert!(kotlin.contains("KEYCHAIN_UNAVAILABLE"));
     assert!(!kotlin.contains("class Unimplemented("));
 }
 
@@ -113,5 +114,6 @@ fn the_swift_bindings_carry_every_media_call() {
         Vec::<&str>::new()
     );
     assert!(swift.contains("case keychainDenied"));
+    assert!(swift.contains("case keychainUnavailable"));
     assert!(!swift.contains("case unimplemented"));
 }

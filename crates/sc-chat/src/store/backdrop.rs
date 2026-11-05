@@ -1,6 +1,7 @@
 use sc_chat_wire::proto::Attachment;
 
 use super::Store;
+use super::codec::uuid_at;
 use crate::contracts::{
     BackdropChange, ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta, MediaKind,
 };
@@ -39,6 +40,15 @@ impl Store {
             Some(meta) => self.put_group_meta(room, meta),
             None => self.drop_group_meta(room),
         }
+    }
+
+    pub fn quiet_rooms(&self, limit: usize) -> ChatResult<Vec<ConvId>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare_cached(
+            "SELECT id FROM conversations c WHERE kind = 'room' AND state = 'active' AND NOT EXISTS (SELECT 1 FROM group_meta g WHERE g.conversation_id = c.id) ORDER BY last_at DESC, id LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit as i64], |row| uuid_at(row, 0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     fn not_a_room(&self, id: ConvId) -> ChatResult<bool> {

@@ -144,7 +144,10 @@ impl Chat {
     }
 
     pub fn retry_keychain(&self) {
-        if self.status().phase == ChatPhase::KeychainDenied {
+        if matches!(
+            self.status().phase,
+            ChatPhase::KeychainDenied | ChatPhase::KeychainUnavailable
+        ) {
             self.restart();
         }
     }

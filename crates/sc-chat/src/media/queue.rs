@@ -6,7 +6,7 @@ use crate::api::wire::{
     CommitAnswer, MediaSelection, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest,
 };
 use crate::contracts::{ChatError, ChatResult, ConvId, MediaKind, Millis};
-use crate::store::{MediaUpload, Reserved, Store, UploadObject};
+use crate::store::{MediaUpload, Reserved, Store, UploadObject, UploadState};
 
 pub const PRESIGN_MARGIN_MS: Millis = 60_000;
 
@@ -63,7 +63,7 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
     let media_id = upload.media_id.ok_or(ChatError::Invalid)?;
     match api.commit_media(media_id).await {
         Ok(answer) => match store.upload_committed(id, now) {
-            Err(ChatError::NotFound) => {
+            Err(ChatError::NotFound) if upload.state != UploadState::Committed => {
                 let _ = api.delete_media(&MediaSelection::ids(vec![media_id])).await;
                 Err(ChatError::NotFound)
             }

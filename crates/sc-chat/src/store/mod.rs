@@ -25,6 +25,7 @@ pub(crate) mod project;
 mod purge;
 pub(crate) mod seal;
 
+use std::fmt;
 use std::path::Path;
 use std::sync::atomic::AtomicI64;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
@@ -74,12 +75,31 @@ pub struct SyncState {
     pub inc: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum StoredContent {
     Open(Vec<u8>),
     Sealed(Vec<u8>),
     System(SystemEvent),
     Deleted,
+}
+
+impl fmt::Debug for StoredContent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open(bytes) => f.debug_tuple("Open").field(&Hidden(bytes.len())).finish(),
+            Self::Sealed(bytes) => f.debug_tuple("Sealed").field(&Hidden(bytes.len())).finish(),
+            Self::System(event) => f.debug_tuple("System").field(event).finish(),
+            Self::Deleted => f.write_str("Deleted"),
+        }
+    }
+}
+
+pub(crate) struct Hidden(pub(crate) usize);
+
+impl fmt::Debug for Hidden {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{} bytes>", self.0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -59,6 +59,7 @@ pub enum ChatPhase {
     Ready,
     Revoked,
     KeychainDenied,
+    KeychainUnavailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

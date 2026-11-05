@@ -1,4 +1,4 @@
-use rusqlite::params;
+use rusqlite::{Connection, params};
 use sc_chat_wire::prost::Message;
 use uuid::Uuid;
 
@@ -158,16 +158,23 @@ impl Store {
     }
 
     pub fn upload_committed(&self, id: Uuid, now: Millis) -> ChatResult<()> {
-        self.touch(
-            id,
-            "UPDATE media_uploads SET state = 'committed', updated_at = ?2 WHERE id = ?1 AND state = 'uploaded'",
-            params![id.as_bytes(), now],
-        )?;
-        if self.upload_kept(id)? {
-            Ok(())
-        } else {
-            Err(ChatError::NotFound)
+        let committed = {
+            let mut conn = self.conn()?;
+            let tx = conn.transaction()?;
+            let changed = tx.execute(
+                "UPDATE media_uploads SET state = 'committed', updated_at = ?2 WHERE id = ?1 AND state = 'uploaded'",
+                params![id.as_bytes(), now],
+            )?;
+            if changed == 0 && !kept(&tx, id)? {
+                return Err(ChatError::NotFound);
+            }
+            tx.commit()?;
+            changed > 0
+        };
+        if committed {
+            self.uploads_changed(&[id]);
         }
+        Ok(())
     }
 
     pub fn upload_failed(&self, id: Uuid, retryable: bool, now: Millis) -> ChatResult<()> {
@@ -217,20 +224,20 @@ impl Store {
         Ok(removed)
     }
 
-    fn upload_kept(&self, id: Uuid) -> ChatResult<bool> {
-        Ok(self.conn()?.query_row(
-            "SELECT EXISTS (SELECT 1 FROM media_uploads WHERE id = ?1)",
-            [id.as_bytes()],
-            |row| row.get(0),
-        )?)
-    }
-
     fn touch(&self, id: Uuid, sql: &str, params: impl rusqlite::Params) -> ChatResult<()> {
         if self.conn()?.execute(sql, params)? > 0 {
             self.uploads_changed(&[id]);
         }
         Ok(())
     }
+}
+
+fn kept(conn: &Connection, id: Uuid) -> ChatResult<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM media_uploads WHERE id = ?1)",
+        [id.as_bytes()],
+        |row| row.get(0),
+    )?)
 }
 
 fn same_reservation(upload: &MediaUpload, reserved: &Reserved) -> bool {

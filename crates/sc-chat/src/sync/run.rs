@@ -29,6 +29,9 @@ impl<L: Local> SyncEngine<L> {
         if let Err(error) = self.devices().await {
             self.failed(error)?;
         }
+        if let Err(error) = self.queue_quiet_rooms() {
+            self.failed(error)?;
+        }
         while !self.stopped() {
             self.wake.reset();
             if self.reset_pending() {
@@ -46,6 +49,9 @@ impl<L: Local> SyncEngine<L> {
                 self.failed(error)?;
             }
             if let Err(error) = self.flush_outbox().await {
+                self.failed(error)?;
+            }
+            if let Err(error) = self.read_room_metas().await {
                 self.failed(error)?;
             }
             let plan = match self.next_plan() {

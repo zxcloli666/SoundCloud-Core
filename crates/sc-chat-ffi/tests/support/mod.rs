@@ -52,23 +52,26 @@ impl ChatTransport for Garbage {
     }
 }
 
+type Hook = Box<dyn Fn(&CoreEvent) + Send + Sync>;
+
 #[derive(Default)]
-pub struct Recorder(Mutex<Vec<CoreEvent>>);
+pub struct Recorder {
+    seen: Mutex<Vec<CoreEvent>>,
+    hook: Mutex<Option<Hook>>,
+}
 
 impl Recorder {
     pub fn statuses(&self) -> usize {
-        self.0
+        self.seen
             .lock()
             .unwrap()
             .iter()
             .filter(|event| matches!(event, CoreEvent::Status(_)))
             .count()
     }
-}
 
-impl Recorder {
     pub fn uploads(&self) -> Vec<MediaUploadsEvent> {
-        self.0
+        self.seen
             .lock()
             .unwrap()
             .iter()
@@ -78,11 +81,18 @@ impl Recorder {
             })
             .collect()
     }
+
+    pub fn on(&self, hook: impl Fn(&CoreEvent) + Send + Sync + 'static) {
+        *self.hook.lock().unwrap() = Some(Box::new(hook));
+    }
 }
 
 impl ChatListener for Recorder {
     fn on_event(&self, event: CoreEvent) {
-        self.0.lock().unwrap().push(event);
+        if let Some(hook) = self.hook.lock().unwrap().as_ref() {
+            hook(&event);
+        }
+        self.seen.lock().unwrap().push(event);
     }
 }
 

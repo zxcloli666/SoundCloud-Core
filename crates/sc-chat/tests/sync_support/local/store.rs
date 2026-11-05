@@ -3,8 +3,9 @@ use sc_chat::outbox::OutboxItem;
 use sc_chat::store::{StoredContent, StoredMessage, SyncState};
 use sc_chat::sync::Local;
 use sc_chat::{
-    ChatResult, ClientId, ConvId, ConversationMeta, ConversationSummary, GoneMessage, HistoryPage,
-    HistoryQuery, Message, Millis, PeerMark, Seq, UserId, UserRef,
+    ChatResult, ClientId, ConvId, ConversationKind, ConversationMeta, ConversationSummary,
+    GoneMessage, HistoryPage, HistoryQuery, MemberState, Message, Millis, PeerMark, Seq, UserId,
+    UserRef,
 };
 
 use super::MemoryLocal;
@@ -59,6 +60,25 @@ impl Local for MemoryLocal {
             None => data.group_meta.remove(&id),
         };
         Ok(())
+    }
+
+    fn quiet_rooms(&self, limit: usize) -> ChatResult<Vec<ConvId>> {
+        let data = self.data.lock().unwrap();
+        let mut rooms: Vec<&ConversationSummary> = data
+            .conversations
+            .values()
+            .filter(|summary| {
+                summary.kind == ConversationKind::Room
+                    && summary.state == MemberState::Active
+                    && !data.group_meta.contains_key(&summary.id)
+            })
+            .collect();
+        rooms.sort_by_key(|summary| std::cmp::Reverse(summary.last_at));
+        Ok(rooms
+            .into_iter()
+            .take(limit)
+            .map(|summary| summary.id)
+            .collect())
     }
 
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>> {
