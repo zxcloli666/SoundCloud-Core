@@ -2,16 +2,13 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use sc_chat::api::{Api, Identity};
-use sc_chat::crypto::DeviceKeys;
-use sc_chat::{ChatError, ChatPhase, ChatResult, HistoryGate, KeyName, KeyStore};
+use sc_chat::{ChatError, ChatPhase};
 
-use super::session::{AuthMove, auth_move};
+use super::session::{AuthMove, Seen, auth_move};
 use super::{Chat, Core, retry};
 
 const OFF_RECHECK_MS: u64 = 3_600_000;
 const OFF_SPREAD_MS: u64 = 600_000;
-const STUB_RETRY: Duration = Duration::from_secs(60);
 const FIRST_FAILURE: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,6 +16,7 @@ pub enum Halt {
     Restart,
     Phase(ChatPhase),
     Retry(Duration),
+    Wait(ChatPhase, Duration),
 }
 
 impl Chat {
@@ -26,14 +24,15 @@ impl Chat {
         let mut failures = 0;
         loop {
             let generation = self.generation();
-            let halt = match self.bring_up(&mut failures).await {
+            let seen = self.session.seen();
+            let halt = match self.bring_up(&seen, &mut failures).await {
                 Ok(core) => {
                     failures = 0;
                     self.drive(core, generation).await
                 }
                 Err(halt) => halt,
             };
-            self.settle(halt, generation).await;
+            self.settle(halt, generation, &seen).await;
         }
     }
 
@@ -56,60 +55,16 @@ impl Chat {
         }
     }
 
-    pub async fn log_out(&self) -> ChatResult<()> {
-        let _ = self.api.remove_this_device().await;
-        self.session.log_out();
-        self.wipe(true).await
-    }
-
-    async fn drop_device(&self, identity: Option<Identity>) {
-        let _ = self.wipe(true).await;
-        let Some(identity) = identity else {
-            return;
-        };
-        let api = Api::new(self.api.channel().clone(), self.api.transport().clone());
-        api.set_identity(Some(identity));
-        let _ = api.remove_this_device().await;
-    }
-
-    pub async fn wipe(&self, forget_device: bool) -> ChatResult<()> {
-        let _lifecycle = self.lifecycle.lock().await;
-        self.forget_user();
-        let core = self.core.write().ok().and_then(|mut core| core.take());
-        self.api.set_identity(None);
-        self.restart();
-        let keys = self.keys.clone();
-        let wiped = self
-            .handle
-            .spawn_blocking(move || {
-                if let Some(core) = core {
-                    core.store.wipe()?;
-                }
-                if forget_device {
-                    DeviceKeys::erase(keys.as_ref())?;
-                    keys.delete(KeyName::Database)?;
-                }
-                Ok(())
-            })
-            .await
-            .unwrap_or(Err(ChatError::Internal));
-        self.feed.update(|status| {
-            status.device_id = None;
-            status.history = HistoryGate::default();
-            status.unread = 0;
-            status.mentions = 0;
-            status.requests = 0;
-        });
-        wiped
-    }
-
     pub fn halt(&self, error: &ChatError, failures: u32) -> Halt {
         match error {
             ChatError::ReloginRequired => Halt::Phase(ChatPhase::Unbound),
             ChatError::SessionBoundOther => Halt::Phase(ChatPhase::BoundOther),
             ChatError::DeviceRevoked => Halt::Phase(ChatPhase::Revoked),
             ChatError::Disabled => Halt::Phase(ChatPhase::Off),
-            ChatError::Unimplemented => Halt::Retry(STUB_RETRY),
+            ChatError::KeychainDenied => Halt::Phase(ChatPhase::KeychainDenied),
+            ChatError::Keychain => {
+                Halt::Wait(ChatPhase::KeychainUnavailable, retry::backoff(failures))
+            }
             ChatError::Busy { retry_ms } => Halt::Retry(retry::busy(*retry_ms)),
             ChatError::Clock { server_now } => {
                 self.api.channel().note_server_now(*server_now);
@@ -125,7 +80,7 @@ impl Chat {
         }
     }
 
-    fn forget_user(&self) {
+    pub(super) fn forget_user(&self) {
         if let Some(core) = self.core() {
             core.sync.set_user(None);
         }
@@ -146,14 +101,33 @@ impl Chat {
         }
     }
 
-    async fn settle(&self, halt: Halt, generation: u64) {
+    async fn settle(&self, halt: Halt, generation: u64, seen: &Seen) {
+        self.retry_asked.store(false, Ordering::SeqCst);
         match halt {
             Halt::Restart => {}
             Halt::Retry(pause) => {
-                self.feed.update(|status| status.online = false);
+                self.feed.update(|status| {
+                    status.online = false;
+                    if status.phase == ChatPhase::KeychainUnavailable {
+                        status.phase = ChatPhase::Starting;
+                    }
+                });
                 self.pause(pause, generation).await;
             }
+            Halt::Wait(phase, pause) => {
+                self.feed.update(|status| {
+                    status.phase = phase;
+                    status.online = false;
+                });
+                let floor = pause.min(retry::FLOOR);
+                tokio::time::sleep(floor).await;
+                self.until_retry(Some(pause - floor), generation).await;
+            }
             Halt::Phase(phase) => {
+                let generation = match phase {
+                    ChatPhase::KeychainDenied => self.answered(generation, seen),
+                    _ => generation,
+                };
                 if signed_out(phase) {
                     self.forget_user();
                 }
@@ -167,13 +141,43 @@ impl Chat {
                 } else {
                     generation
                 };
-                if phase == ChatPhase::Off {
-                    let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);
-                    self.pause(Duration::from_millis(recheck), generation).await;
-                } else {
-                    self.restarted(generation).await;
+                match phase {
+                    ChatPhase::Off => {
+                        let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);
+                        self.pause(Duration::from_millis(recheck), generation).await;
+                    }
+                    ChatPhase::KeychainDenied => self.until_retry(None, generation).await,
+                    _ => self.restarted(generation).await,
                 }
             }
+        }
+    }
+
+    fn answered(&self, generation: u64, seen: &Seen) -> u64 {
+        let now = self.generation();
+        if self.session.seen() == *seen {
+            now
+        } else {
+            generation
+        }
+    }
+
+    async fn until_retry(&self, pause: Option<Duration>, generation: u64) {
+        let asked = self.retry.notified();
+        tokio::pin!(asked);
+        asked.as_mut().enable();
+        if self.retry_asked.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        let waited = async {
+            match pause {
+                Some(pause) => self.pause(pause, generation).await,
+                None => self.restarted(generation).await,
+            }
+        };
+        tokio::select! {
+            () = waited => {}
+            () = asked => {}
         }
     }
 

@@ -1,4 +1,5 @@
 use sc_chat::{ChatError, Millis};
+use uuid::Uuid;
 
 #[uniffi::remote(Error)]
 pub enum ChatError {
@@ -27,14 +28,27 @@ pub enum ChatError {
     TooYoung,
     Disabled,
     SendPaused,
+    QuotaExceeded {
+        used: u64,
+        quota: u64,
+    },
+    MediaStarRequired,
+    RoomStarRequired,
+    BackdropCooldown {
+        until: Millis,
+    },
+    MediaUploadsPaused,
+    MediaMissing {
+        ids: Vec<Uuid>,
+    },
     Invalid,
     NotFound,
-    Unimplemented,
     Internal,
     Offline,
     NotReady,
     Store,
     Keychain,
+    KeychainDenied,
     Crypto,
     #[uniffi(name = "ProtocolError")]
     Protocol,

@@ -1,7 +1,10 @@
+pub mod attachments;
 mod decode;
 mod encode;
 mod snapshot;
 mod text;
+
+use sc_chat_wire::proto::Attachment;
 
 use crate::contracts::{
     ChatError, ChatResult, ConversationMeta, Embed, Forwarded, MessageClass, RichText, Seq, UserId,
@@ -14,16 +17,17 @@ pub use encode::encode;
 pub const REACTION_MAX: usize = 64;
 pub const LINK_MAX: usize = 2048;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Post {
     pub text: RichText,
     pub reply_to: Option<Seq>,
     pub mentions: Vec<UserId>,
     pub embeds: Vec<Embed>,
+    pub attachments: Vec<Attachment>,
     pub forwarded_from: Option<Forwarded>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Content {
     Post(Post),
     Edit {
@@ -88,3 +92,7 @@ pub fn open(ck: &Ck, at: &MessageAt, target: Option<Seq>, body: &[u8]) -> ChatRe
 #[cfg(test)]
 #[path = "envelope_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "attachments_tests.rs"]
+mod attachments_tests;

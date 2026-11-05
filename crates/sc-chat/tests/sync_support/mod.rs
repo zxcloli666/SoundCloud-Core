@@ -5,6 +5,7 @@ mod clock;
 mod events;
 pub mod fixtures;
 mod local;
+pub mod real;
 mod server;
 
 use std::sync::Arc;

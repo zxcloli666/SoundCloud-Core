@@ -1,7 +1,7 @@
 use sc_chat::{
     ChatStatus, ConvId, ConversationMarks, ConversationSummary, CoreEvent, Device,
-    DeviceAddedEvent, GoneEvent, GoneMessage, Message, MessagesEvent, MessagesOrigin, PeerMark,
-    SyncEvent, TypingEvent, UserId,
+    DeviceAddedEvent, GoneEvent, GoneMessage, MediaUploadsEvent, Message, MessagesEvent,
+    MessagesOrigin, PeerMark, SyncEvent, TypingEvent, UserId,
 };
 
 #[uniffi::remote(Enum)]
@@ -57,4 +57,5 @@ pub enum CoreEvent {
     Typing(TypingEvent),
     Gone(GoneEvent),
     DeviceAdded(DeviceAddedEvent),
+    MediaUploads(MediaUploadsEvent),
 }

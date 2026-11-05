@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::contracts::{
-    ChatResult, ClientId, ConvId, ConversationSummary, GoneMessage, HistoryPage, HistoryQuery,
-    Message, Millis, PeerMark, Seq, UserId, UserRef,
+    ChatResult, ClientId, ConvId, ConversationMeta, ConversationSummary, GoneMessage, HistoryPage,
+    HistoryQuery, Message, Millis, PeerMark, Seq, UserId, UserRef,
 };
 use crate::crypto::Ck;
 use crate::outbox::{Outbox, OutboxItem};
@@ -14,6 +14,9 @@ pub trait Local: Send + Sync {
     fn known(&self, limit: usize) -> ChatResult<Vec<(ConvId, Seq)>>;
     fn conversation(&self, id: ConvId) -> ChatResult<Option<ConversationSummary>>;
     fn put_conversations(&self, items: &[ConversationSummary]) -> ChatResult<()>;
+    fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()>;
+    fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()>;
+    fn quiet_rooms(&self, limit: usize) -> ChatResult<Vec<ConvId>>;
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>>;
     fn put_users(&self, users: &[UserRef]) -> ChatResult<()>;
     fn put_marks(&self, id: ConvId, marks: &[PeerMark]) -> ChatResult<()>;
@@ -74,6 +77,18 @@ impl Local for LocalStore {
 
     fn put_conversations(&self, items: &[ConversationSummary]) -> ChatResult<()> {
         self.store.put_conversations(items)
+    }
+
+    fn put_group_meta(&self, id: ConvId, meta: &ConversationMeta) -> ChatResult<()> {
+        self.store.put_group_meta(id, meta)
+    }
+
+    fn put_room_meta(&self, id: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {
+        self.store.put_room_meta(id, meta)
+    }
+
+    fn quiet_rooms(&self, limit: usize) -> ChatResult<Vec<ConvId>> {
+        self.store.quiet_rooms(limit)
     }
 
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>> {

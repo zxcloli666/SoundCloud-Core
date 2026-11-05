@@ -328,5 +328,5 @@ fn the_meta_vector_is_group_meta() {
         meta.description,
         text(&case["envelope"]["meta"]["description"])
     );
-    assert_eq!(meta.avatar_media_id, None);
+    assert_eq!(meta.avatar, None);
 }

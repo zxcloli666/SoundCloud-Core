@@ -194,6 +194,7 @@ impl Client {
             },
             mentions: Vec::new(),
             embeds: Vec::new(),
+            attachments: Vec::new(),
             reply_to: None,
             forwarded_from: None,
         });
@@ -230,6 +231,7 @@ impl Client {
             epoch,
             target_seq: None,
             body: vec![7; 64],
+            media: Vec::new(),
         };
         self.api.send(conversation_id, &message).await
     }

@@ -1,10 +1,14 @@
 use sc_chat::envelope::{self, Content, Post};
+use sc_chat::media::{ALBUM_MAX, ROOM_ALBUM_MAX};
 use sc_chat::outbox::OutboxItem;
 use sc_chat::sc_chat_wire::prost::Message as _;
+use sc_chat::sc_chat_wire::proto::Attachment;
 use sc_chat::{
     ChatError, ChatResult, ClientId, ConvId, ConversationKind, EMBEDS_MAX, Forwarded, HistoryQuery,
-    Message, MessageBody, MessageRef, RichText, SendInput, Seq, SpanKind, TEXT_MAX, UserId, embeds,
+    MediaKind, Message, MessageBody, MessageRef, RichText, SendInput, Seq, SpanKind, TEXT_MAX,
+    UploadState, UserId, embeds,
 };
+use uuid::Uuid;
 
 use crate::runtime::{Chat, Core};
 
@@ -12,18 +16,26 @@ impl Chat {
     pub async fn send(&self, input: SendInput) -> ChatResult<Message> {
         let post = match input.forward {
             Some(source) => self.blocking(move |core| forward_of(core, source)).await?,
-            None => Post {
-                mentions: mentions(&input.text),
-                embeds: embeds::validate_all(&input.embeds)
-                    .into_iter()
-                    .take(EMBEDS_MAX)
-                    .collect(),
-                text: input.text,
-                reply_to: input.reply_to,
-                forwarded_from: None,
-            },
+            None => composed(&input, Vec::new()),
         };
-        if post.text.text.trim().is_empty() && post.embeds.is_empty() {
+        self.queue_post(&input, post).await
+    }
+
+    pub async fn send_album(&self, input: SendInput, album: Uuid) -> ChatResult<Message> {
+        if input.forward.is_some() {
+            return Err(ChatError::Invalid);
+        }
+        let conversation_id = input.conversation_id;
+        let attachments = self
+            .blocking(move |core| album_of(core, conversation_id, album))
+            .await?;
+        let post = composed(&input, attachments);
+        self.queue_post(&input, post).await
+    }
+
+    async fn queue_post(&self, input: &SendInput, post: Post) -> ChatResult<Message> {
+        if post.text.text.trim().is_empty() && post.embeds.is_empty() && post.attachments.is_empty()
+        {
             return Err(ChatError::Invalid);
         }
         if post.text.text.encode_utf16().count() > TEXT_MAX {
@@ -65,6 +77,50 @@ impl Chat {
     }
 }
 
+fn composed(input: &SendInput, attachments: Vec<Attachment>) -> Post {
+    Post {
+        mentions: mentions(&input.text),
+        embeds: embeds::validate_all(&input.embeds)
+            .into_iter()
+            .take(EMBEDS_MAX)
+            .collect(),
+        attachments,
+        text: input.text.clone(),
+        reply_to: input.reply_to,
+        forwarded_from: None,
+    }
+}
+
+fn album_of(core: &Core, conversation_id: ConvId, album: Uuid) -> ChatResult<Vec<Attachment>> {
+    let uploads = core.store.album_uploads(album)?;
+    if uploads.is_empty() {
+        return Err(ChatError::NotFound);
+    }
+    let foreign = uploads.iter().any(|upload| {
+        upload.kind != MediaKind::Image
+            || upload.conversation_id != conversation_id
+            || upload.state == UploadState::Failed
+    });
+    let room = core
+        .store
+        .conversation(conversation_id)?
+        .is_some_and(|summary| summary.kind == ConversationKind::Room);
+    let cap = if room { ROOM_ALBUM_MAX } else { ALBUM_MAX };
+    if foreign || uploads.len() > cap {
+        return Err(ChatError::Invalid);
+    }
+    if uploads
+        .iter()
+        .any(|upload| upload.state != UploadState::Committed)
+    {
+        return Err(ChatError::NotReady);
+    }
+    Ok(uploads
+        .into_iter()
+        .map(|upload| upload.attachment)
+        .collect())
+}
+
 fn forward_of(core: &Core, source: MessageRef) -> ChatResult<Post> {
     let conversation = core
         .store
@@ -88,6 +144,15 @@ fn forward_of(core: &Core, source: MessageRef) -> ChatResult<Post> {
     let MessageBody::Text(text) = message.body else {
         return Err(ChatError::Invalid);
     };
+    let attachments = message
+        .attachments
+        .iter()
+        .map(|attachment| {
+            core.store
+                .attachment(source.conversation_id, attachment.media_id)?
+                .ok_or(ChatError::NotFound)
+        })
+        .collect::<ChatResult<Vec<_>>>()?;
     let author = core.store.users(std::slice::from_ref(&message.sender))?;
     let forwarded_from = message.forwarded_from.unwrap_or_else(|| Forwarded {
         name: author
@@ -99,6 +164,7 @@ fn forward_of(core: &Core, source: MessageRef) -> ChatResult<Post> {
     Ok(Post {
         mentions: Vec::new(),
         embeds: message.embeds,
+        attachments,
         text,
         reply_to: None,
         forwarded_from: Some(forwarded_from),

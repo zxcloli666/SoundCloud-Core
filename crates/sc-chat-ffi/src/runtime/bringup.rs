@@ -3,48 +3,56 @@ use std::sync::Arc;
 use sc_chat::api::Identity;
 use sc_chat::api::wire::ConfigView;
 use sc_chat::{
-    Access, ChatConfig, ChatError, ChatLimits, ChatPhase, ChatResult, KeyStorage, UserId,
+    Access, ChatConfig, ChatError, ChatLimits, ChatPhase, ChatResult, KeyStorage, MediaConfig,
+    UserId,
 };
 
+use super::session::Seen;
 use super::{Chat, Core, Halt};
 
 impl Chat {
-    pub(super) async fn bring_up(self: &Arc<Self>, failures: &mut u32) -> Result<Arc<Core>, Halt> {
-        let Some(session_id) = self.session.current() else {
+    pub(super) async fn bring_up(
+        self: &Arc<Self>,
+        seen: &Seen,
+        failures: &mut u32,
+    ) -> Result<Arc<Core>, Halt> {
+        let Some(session_id) = seen.session_id.clone() else {
             return Err(Halt::Phase(ChatPhase::SignedOut));
         };
-        if self.session.logged_out() {
+        if seen.logged_out {
             return Err(Halt::Phase(ChatPhase::Unbound));
         }
-        self.feed
-            .update(|status| status.phase = ChatPhase::Starting);
-        let core = self
-            .local_core()
-            .await
-            .map_err(|error| self.fail(&error, failures))?;
-        self.api.set_identity(Some(Identity {
+        self.feed.update(|status| {
+            if status.phase != ChatPhase::KeychainUnavailable {
+                status.phase = ChatPhase::Starting;
+            }
+        });
+        let core = self.local_core().await;
+        self.current(seen)?;
+        let core = core.map_err(|error| self.fail(&error, failures))?;
+        let identity = Identity {
             session_id,
             device_id: core.device_id,
             keys: core.keys.clone(),
-        }));
-        let view = self
-            .api
-            .config()
-            .await
-            .map_err(|error| self.fail(&error, failures))?;
+        };
+        self.adopt_identity(identity, seen).await?;
+        self.feed
+            .update(|status| status.phase = ChatPhase::Starting);
+        let view = self.api.config().await;
+        self.current(seen)?;
+        let view = view.map_err(|error| self.fail(&error, failures))?;
         let user_id = view.user_id.clone();
         if !self.adopt_config(view).enabled {
             return Err(Halt::Phase(ChatPhase::Off));
         }
-        let device = self
-            .api
-            .register_device(&self.device)
-            .await
-            .map_err(|error| self.fail(&error, failures))?;
+        self.current(seen)?;
+        let device = self.api.register_device(&self.device).await;
+        self.current(seen)?;
+        let device = device.map_err(|error| self.fail(&error, failures))?;
         self.feed
             .update(|status| status.device_id = Some(device.id));
         if let Some(user_id) = user_id {
-            self.adopt_user(&core, user_id, failures).await?;
+            self.adopt_user(&core, user_id, seen, failures).await?;
         }
         self.feed.update(|status| {
             status.phase = ChatPhase::Ready;
@@ -77,10 +85,18 @@ impl Chat {
         Ok(core)
     }
 
+    async fn adopt_identity(&self, identity: Identity, seen: &Seen) -> Result<(), Halt> {
+        let _lifecycle = self.lifecycle.lock().await;
+        self.current(seen)?;
+        self.api.set_identity(Some(identity));
+        Ok(())
+    }
+
     async fn adopt_user(
         &self,
         core: &Arc<Core>,
         user_id: UserId,
+        seen: &Seen,
         failures: &mut u32,
     ) -> Result<(), Halt> {
         let store = core.store.clone();
@@ -95,8 +111,9 @@ impl Chat {
                 Ok(other)
             })
             .await
-            .unwrap_or(Err(ChatError::Internal))
-            .map_err(|error| self.fail(&error, failures))?;
+            .unwrap_or(Err(ChatError::Internal));
+        self.current(seen)?;
+        let other_account = other_account.map_err(|error| self.fail(&error, failures))?;
         if other_account {
             let _ = self.wipe(false).await;
             return Err(Halt::Restart);
@@ -116,6 +133,14 @@ impl Chat {
             *current = Some(config.clone());
         }
         config
+    }
+
+    fn current(&self, seen: &Seen) -> Result<(), Halt> {
+        if self.session.seen() == *seen {
+            Ok(())
+        } else {
+            Err(Halt::Restart)
+        }
     }
 
     fn fail(&self, error: &ChatError, failures: &mut u32) -> Halt {
@@ -145,5 +170,10 @@ fn config_of(view: ConfigView) -> ChatConfig {
             envelope_max: view.limits.envelope_max,
             disappearing_ttls: view.limits.disappearing_ttls,
         },
+        media: MediaConfig::from(&view.media),
     }
 }
+
+#[cfg(test)]
+#[path = "bringup_tests.rs"]
+mod tests;

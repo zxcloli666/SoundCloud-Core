@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::conversation::UserRef;
 use super::embed::Embed;
@@ -20,6 +21,15 @@ pub struct ReportInput {
     pub conversation_id: ConvId,
     pub seq_from: Seq,
     pub seq_to: Seq,
+    pub reason: ReportReason,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackdropReport {
+    pub conversation_id: ConvId,
+    pub media_id: Uuid,
     pub reason: ReportReason,
     pub comment: Option<String>,
 }

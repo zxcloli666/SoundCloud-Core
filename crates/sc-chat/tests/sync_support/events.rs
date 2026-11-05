@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 
 use sc_chat::{
-    ChatStatus, CoreEvent, DeviceAddedEvent, Events, GoneEvent, MessagesEvent, SyncEvent,
-    TypingEvent,
+    ChatStatus, CoreEvent, DeviceAddedEvent, Events, GoneEvent, MediaUploadsEvent, MessagesEvent,
+    SyncEvent, TypingEvent,
 };
 
 #[derive(Default)]
@@ -56,6 +56,13 @@ impl Recorder {
     pub fn devices(&self) -> Vec<DeviceAddedEvent> {
         self.pick(|event| match event {
             CoreEvent::DeviceAdded(added) => Some(added),
+            _ => None,
+        })
+    }
+
+    pub fn uploads(&self) -> Vec<MediaUploadsEvent> {
+        self.pick(|event| match event {
+            CoreEvent::MediaUploads(uploads) => Some(uploads),
             _ => None,
         })
     }

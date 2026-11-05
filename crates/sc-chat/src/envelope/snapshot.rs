@@ -1,5 +1,6 @@
 use sc_chat_wire::proto;
 
+use super::attachments;
 use crate::contracts::{ConversationMeta, Embed, EmbedKind, EmbedTrack, RoomInvite};
 
 pub fn embed_to_wire(embed: &Embed) -> proto::Embed {
@@ -41,15 +42,21 @@ pub fn meta_to_wire(meta: &ConversationMeta) -> proto::Meta {
     proto::Meta {
         title: meta.title.clone(),
         description: meta.description.clone(),
-        avatar_media_id: meta.avatar_media_id.clone().unwrap_or_default(),
+        avatar_media_id: meta
+            .avatar
+            .as_ref()
+            .map(|avatar| avatar.media_id.clone())
+            .unwrap_or_default(),
     }
 }
 
-pub fn meta_from_wire(meta: proto::Meta) -> ConversationMeta {
+pub fn meta_from_wire(meta: proto::Meta, attachments: &[proto::Attachment]) -> ConversationMeta {
+    let avatar =
+        filled(meta.avatar_media_id).and_then(|id| attachments::meta_image(attachments, &id));
     ConversationMeta {
         title: meta.title,
         description: meta.description,
-        avatar_media_id: filled(meta.avatar_media_id),
+        avatar,
     }
 }
 

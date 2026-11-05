@@ -1,16 +1,22 @@
-use sc_chat_wire::proto::envelope::Body;
+use uuid::Uuid;
 
 use super::local::Local;
 use super::summary::{self, Facts};
 use super::{SyncEngine, fatal, system, transient};
 use crate::api::wire::{CardView, ConversationView, MessageView, SyncConversation};
 use crate::contracts::{
-    ChatError, ChatResult, ConvId, ConversationKind, ConversationSummary, CoreEvent, HistoryQuery,
-    Seq, SyncEvent, SystemKind, UserId, UserRef,
+    ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta, ConversationSummary,
+    CoreEvent, HistoryQuery, Seq, SyncEvent, SystemKind, UserId, UserRef,
 };
 use crate::embeds::clean;
+use crate::envelope::attachments;
 
 pub const RENDER_MAX: u32 = 200;
+
+fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
+    let avatar = meta.avatar.as_ref()?;
+    Uuid::parse_str(&avatar.media_id).ok()
+}
 
 fn structural(message: &MessageView) -> bool {
     match (message.class.as_str(), &message.body) {
@@ -83,7 +89,17 @@ impl<L: Local> SyncEngine<L> {
         view: &ConversationView,
         existing: Option<&ConversationSummary>,
     ) -> ChatResult<ConversationSummary> {
-        let title = self.meta_title(view).await?;
+        let read = self.read_meta(view).await?;
+        let meta = match view.kind {
+            ConversationKind::Room => {
+                self.keep_room_meta(view.id, read)?;
+                None
+            }
+            _ => read.opened().map(attachments::group_meta),
+        };
+        if let Some(meta) = &meta {
+            self.store.put_group_meta(view.id, meta)?;
+        }
         let peer = match &view.peer {
             Some(peer) => Some(self.user_ref(peer).await?),
             None => None,
@@ -95,7 +111,13 @@ impl<L: Local> SyncEngine<L> {
                     .is_some_and(|created| view.created_at < created)
         });
         let facts = Facts {
-            title,
+            title: meta
+                .as_ref()
+                .and_then(|meta| clean::optional_text(Some(&meta.title), clean::TEXT_MAX)),
+            avatar_media_id: match view.kind {
+                ConversationKind::Room => Some(None),
+                _ => meta.as_ref().map(avatar_id),
+            },
             peer,
             history_locked,
         };
@@ -106,25 +128,6 @@ impl<L: Local> SyncEngine<L> {
         if let Ok(epoch) = u32::try_from(view.key_epoch) {
             self.with(|state| state.note_epoch(view.id, epoch));
         }
-    }
-
-    async fn meta_title(&self, view: &ConversationView) -> ChatResult<Option<String>> {
-        let (Some(meta_ct), Some(epoch)) = (&view.meta_ct, view.meta_epoch) else {
-            return Ok(None);
-        };
-        let Ok(epoch) = u32::try_from(epoch) else {
-            return Ok(None);
-        };
-        let Some(ck) = self.key(view.id, epoch).await? else {
-            return Ok(None);
-        };
-        let Ok(envelope) = self.cipher.open_meta(&ck, view.id, epoch, meta_ct) else {
-            return Ok(None);
-        };
-        Ok(match envelope.body {
-            Some(Body::Meta(meta)) => clean::optional_text(Some(&meta.title), clean::TEXT_MAX),
-            _ => None,
-        })
     }
 
     async fn user_ref(&self, user_id: &UserId) -> ChatResult<UserRef> {

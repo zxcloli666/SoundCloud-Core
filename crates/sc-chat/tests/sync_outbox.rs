@@ -256,3 +256,54 @@ async fn a_send_that_lands_after_unseen_messages_keeps_the_cursor_and_the_server
     let syncs = rig.server.calls_to("POST", "/chat/sync");
     assert_eq!(syncs[0].body["known"], json!([[A, 6]]));
 }
+
+#[tokio::test]
+async fn an_album_post_names_its_images_and_a_text_post_names_none() {
+    use sc_chat::sc_chat_wire::proto::{Attachment, Thumb};
+
+    let rig = rig();
+    queued(&rig);
+    let first = Uuid::from_u128(0x1a);
+    let second = Uuid::from_u128(0x2a);
+    let mut album = text("two");
+    album.attachments = [first, second]
+        .iter()
+        .map(|id| Attachment {
+            media_id: id.to_string(),
+            thumb: Some(Thumb {
+                media_id: Uuid::new_v4().to_string(),
+                ..Thumb::default()
+            }),
+            ..Attachment::default()
+        })
+        .collect();
+    rig.local.queue(OutboxItem {
+        client_id: Uuid::from_u128(0xc2),
+        conversation_id: A,
+        class: MessageClass::Post,
+        target_seq: None,
+        envelope: album.encode_to_vec(),
+        created_at: START_MS + 1,
+        attempts: 0,
+        next_at: START_MS,
+    });
+    let send = format!("/chat/conversations/{A}/messages");
+    rig.server.json(
+        "GET",
+        &format!("/chat/conversations/{A}/keys"),
+        keys(A, &[1]),
+    );
+    for seq in [7, 8] {
+        rig.server.json(
+            "POST",
+            &send,
+            json!({"seq": seq, "ts": START_MS + seq, "expires_at": null}),
+        );
+    }
+
+    assert_eq!(rig.engine.flush_outbox().await, Ok(2));
+
+    let calls = sends(&rig);
+    assert!(calls[0].body.get("media").is_none());
+    assert_eq!(calls[1].body["media"], json!([first, second]));
+}

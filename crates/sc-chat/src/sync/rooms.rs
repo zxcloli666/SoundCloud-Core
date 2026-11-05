@@ -20,6 +20,7 @@ impl<L: Local> SyncEngine<L> {
             None => seated(id, code, from_seq, self.now()),
         };
         let messages = self.catch_up(id, summary.last_seq).await?;
+        self.room_meta(&mut summary, true).await?;
         summary::absorb(&mut summary, &messages);
         self.save(std::slice::from_ref(&summary))?;
         self.emit_summaries(vec![summary.clone()]);
@@ -51,6 +52,7 @@ impl<L: Local> SyncEngine<L> {
                 continue;
             }
             let messages = self.catch_up(*id, summary.last_seq).await?;
+            self.room_meta(&mut summary, false).await?;
             summary::absorb(&mut summary, &messages);
             self.save(std::slice::from_ref(&summary))?;
             if !messages.is_empty() {
@@ -94,6 +96,7 @@ fn seated(id: ConvId, code: &str, from_seq: Seq, now: Millis) -> ConversationSum
         kind: ConversationKind::Room,
         title: None,
         avatar_url: None,
+        avatar_media_id: None,
         peer: None,
         role: MemberRole::Member,
         state: MemberState::Active,

@@ -1,7 +1,7 @@
 use sc_chat_wire::proto::{self, Envelope, envelope::Body};
 
 use super::snapshot::{embed_from_wire, meta_from_wire};
-use super::{Content, Post, text};
+use super::{Content, Post, attachments, text};
 use crate::contracts::{
     ChatError, ChatResult, EMBEDS_MAX, Embed, EmbedKind, Forwarded, RichText, Seq,
 };
@@ -24,7 +24,7 @@ pub fn decode(envelope: &Envelope) -> ChatResult<Content> {
             emoji: emoji(&reaction.emoji)?,
             on: reaction.on,
         },
-        Body::Meta(meta) => Content::Meta(meta_from_wire(meta.clone())),
+        Body::Meta(meta) => Content::Meta(meta_from_wire(meta.clone(), &envelope.attachments)),
         Body::Pin(pin) => Content::Pin {
             target: local_seq(pin.target)?,
             on: pin.on,
@@ -53,6 +53,7 @@ fn post(envelope: &Envelope, body: &proto::Text) -> ChatResult<Post> {
             .filter_map(embed_from_wire)
             .take(EMBEDS_MAX)
             .collect(),
+        attachments: attachments::album(&envelope.attachments),
         forwarded_from: envelope.forwarded_from.clone().map(forwarded).transpose()?,
     })
 }

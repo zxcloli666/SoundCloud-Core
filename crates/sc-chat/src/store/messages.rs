@@ -3,7 +3,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::items::{self, Item};
 use super::project::{self, Context};
 use super::{
-    Store, StoreKeys, StoredContent, StoredMessage, content, conversations, embeds, purge,
+    Store, StoreKeys, StoredContent, StoredMessage, attachments, content, conversations, embeds,
+    purge,
 };
 use crate::contracts::{ChatResult, ConvId, MessageBody, MessageClass, Seq, SystemKind};
 use crate::envelope::Content;
@@ -151,6 +152,11 @@ fn reindex(
         index::replace(tx, &keys.search, item.id, text.as_deref())?;
     }
     embeds::replace(tx, keys, item.id, conv, &message.embeds)?;
+    let media = match message.body {
+        MessageBody::Deleted => Vec::new(),
+        _ => attachments::of(&item),
+    };
+    attachments::replace(tx, keys, item.id, conv, &media)?;
     if message.body != MessageBody::Deleted {
         return Ok(false);
     }

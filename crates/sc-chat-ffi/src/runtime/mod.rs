@@ -1,11 +1,14 @@
 mod bringup;
 mod clock;
+#[cfg(test)]
+mod doubles;
 mod expiry;
 mod feed;
 mod lifecycle;
 mod local;
 mod retry;
 mod session;
+mod wipe;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -17,9 +20,10 @@ use sc_chat::api::Api;
 use sc_chat::api::wire::RegisterDevice;
 use sc_chat::channel::Channel;
 use sc_chat::crypto::DeviceKeys;
-use sc_chat::{ChatConfig, ChatError, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
+use sc_chat::media::MediaWorker;
+use sc_chat::{ChatConfig, ChatError, ChatPhase, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
 use tokio::runtime::Handle;
-use tokio::sync::watch;
+use tokio::sync::{Notify, Semaphore, watch};
 
 use crate::platform::{ChatKeys, ChatListener, ChatTransport, Keys, Wire};
 use crate::setup::ChatSetup;
@@ -28,6 +32,8 @@ use feed::Feed;
 use session::Session;
 
 pub use lifecycle::Halt;
+
+const PREPARE_SLOTS: usize = 2;
 pub use local::Core;
 
 pub struct Held {
@@ -40,6 +46,8 @@ pub struct Chat {
     pub handle: Handle,
     pub api: Arc<Api>,
     pub keys: Arc<Keys>,
+    pub media: MediaWorker,
+    pub preparing: Arc<Semaphore>,
     dir: PathBuf,
     device: RegisterDevice,
     clock: Arc<dyn Clock>,
@@ -49,6 +57,8 @@ pub struct Chat {
     config: RwLock<Option<ChatConfig>>,
     visible: AtomicBool,
     restarts: watch::Sender<u64>,
+    retry: Notify,
+    retry_asked: AtomicBool,
     lifecycle: tokio::sync::Mutex<()>,
     held: Mutex<HashMap<String, Held>>,
 }
@@ -61,12 +71,24 @@ impl Chat {
         transport: Arc<dyn ChatTransport>,
         listener: Arc<dyn ChatListener>,
     ) -> Self {
-        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let channel = Arc::new(Channel::new(clock.clone()));
+        let channel = Arc::new(Channel::new(Arc::new(SystemClock)));
+        let api = Api::new(channel, Arc::new(Wire(transport)));
+        Self::with_api(handle, setup, keys, api, listener)
+    }
+
+    fn with_api(
+        handle: Handle,
+        setup: ChatSetup,
+        keys: Arc<dyn ChatKeys>,
+        api: Api,
+        listener: Arc<dyn ChatListener>,
+    ) -> Self {
         Self {
             handle,
-            api: Arc::new(Api::new(channel, Arc::new(Wire(transport)))),
+            api: Arc::new(api),
             keys: Arc::new(Keys(keys)),
+            media: MediaWorker::default(),
+            preparing: Arc::new(Semaphore::new(PREPARE_SLOTS)),
             dir: PathBuf::from(setup.data_dir),
             device: RegisterDevice {
                 platform: setup.platform,
@@ -74,13 +96,15 @@ impl Chat {
                 app_version: setup.app_version,
                 caps: Vec::new(),
             },
-            clock,
+            clock: Arc::new(SystemClock),
             feed: Arc::new(Feed::new(listener)),
             session: Session::default(),
             core: RwLock::new(None),
             config: RwLock::new(None),
             visible: AtomicBool::new(false),
             restarts: watch::Sender::new(0),
+            retry: Notify::new(),
+            retry_asked: AtomicBool::new(false),
             lifecycle: tokio::sync::Mutex::new(()),
             held: Mutex::new(HashMap::new()),
         }
@@ -133,6 +157,16 @@ impl Chat {
     pub fn kick(&self) {
         if let Some(core) = self.core() {
             core.sync.kick();
+        }
+    }
+
+    pub fn retry_keychain(&self) {
+        if matches!(
+            self.status().phase,
+            ChatPhase::KeychainDenied | ChatPhase::KeychainUnavailable
+        ) {
+            self.retry_asked.store(true, Ordering::SeqCst);
+            self.retry.notify_waiters();
         }
     }
 

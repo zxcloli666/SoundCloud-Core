@@ -7,7 +7,7 @@
 The `Chat mobile` workflow builds both packages on every push to `main` and on `sc-chat-ffi-v*` tags. Take them from the run of a tag:
 
 ```sh
-gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.1.0
+gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.4
 gh run download <run id> --repo zxcloli666/SoundCloud-Core
 ```
 
@@ -40,7 +40,7 @@ Copy the `sc-chat-ios` folder into the repo, add it in Xcode with File > Add Pac
 |---|---|
 | `ChatKeys` | `load`, `save`, `delete` of four secrets by `KeyName`, see Storage |
 | `ChatTransport` | `tiers()`: tiers to try, best first. `exchange(request)`: send one sealed envelope |
-| `ChatListener` | `onEvent(event)`: status, sync, messages, typing, gone, device added |
+| `ChatListener` | `onEvent(event)`: status, sync, messages, typing, gone, device added, media uploads |
 
 `exchange` rules:
 
@@ -79,10 +79,11 @@ client.setSession(sessionId: sessionId)
 client.setVisible(visible: true)
 ```
 
-- `setSession(id)`: the music session id. Call it on start, after every login (even with the same id) and with `null` on sign out. Sign out removes this chat device and wipes its store and keys.
+- `setSession(id)`: the music session id. Call it on start, after every login (even with the same id) and with `null` on sign out. Sign out removes this chat device and wipes its store, its orphans and its keys.
 - `setVisible(true)` in the foreground, `false` in the background. Visible means long polls and fast delivery, hidden means one sync a minute.
 - `setFocus(conversationId)` while a thread is on screen, `setFocus(null)` when it closes.
 - `networkChanged()` after Wi-Fi, mobile data or VPN changes.
+- `retryKeychain()` when the user asks to try the keychain again; it does nothing outside `KEYCHAIN_DENIED` and `KEYCHAIN_UNAVAILABLE`, and a call while a try runs is dropped.
 
 ### Status
 
@@ -96,6 +97,8 @@ client.setVisible(visible: true)
 | `BOUND_OTHER` | the session is bound to another device: sealed relogin |
 | `REVOKED` | this device was removed, its data is gone: sealed relogin |
 | `OFF` | chat is off for this account |
+| `KEYCHAIN_DENIED` | the user refused the keychain: chat waits, no prompt comes back until `retryKeychain()` |
+| `KEYCHAIN_UNAVAILABLE` | the keychain fails without a refusal: chat retries on its own, about 2 s at first, then at most a minute apart; `retryKeychain()` tries as soon as 2 s have passed since the last try |
 
 `history.locked` and `history.unlocksAt`: a new device reads old chats only after an older device confirms it or after 72 h.
 
@@ -122,6 +125,7 @@ The QR code is `scd://link?token=<claimToken>&mode=<pull|push>`, the same as on 
 | `conversations(ListQuery(filter, cursor, limit))` | the list from the local store, `nextCursor` for the next page |
 | `openThread(id)` | last 50 messages with pending ones, read marks, pins, draft |
 | `history(id, HistoryQuery(before = oldestSeq, after = null, limit))` | older messages; goes to the server when the store runs out |
+| `imagesBefore(id, before, limit)` | the gallery: stored posts with images, newest first, older than `before`; `more` says whether another page exists |
 | `send(SendInput(conversationId, clientId, text, replyTo, embeds, forward))` | answers the pending message at once; the sent copy comes back in `CoreEvent.Messages` with `seq` and `state` |
 | `markRead(id, seq)` | the newest `seq` on screen |
 | `createConversation(CreateConversation(kind, members, title))` | `DIRECT` with one user id, or `GROUP` |
@@ -129,6 +133,43 @@ The QR code is `scd://link?token=<claimToken>&mode=<pull|push>`, the same as on 
 | `report(ReportInput(id, seqFrom, seqTo, reason, comment))` | comment up to 500 chars |
 
 Keep the list and the open thread in sync with `CoreEvent.Sync` (changed conversations, read marks, request count), `Messages`, `Typing` and `Gone`.
+
+### Images, avatars and room backdrops
+
+Core seals every file. The app keeps the sealed bytes in its own files and does the presigned `PUT` and `GET` itself, straight to the given `url` with exactly the given `headers`, never through `ChatTransport`.
+
+| Call | Notes |
+|---|---|
+| `mediaConfig()` | `uploads`, `star`, `quota`, `used`, `limits`; no uploads until the first config |
+| `prepareImage(source)` | WebP up to 1600 px, sealed `image` and `thumb`, run off the main thread |
+| `prepareAvatar(source)` | group avatar: 512 px, sealed size up to 64 KiB, no thumb |
+| `prepareBackdrop(source)` | room backdrop: 1920 px, sealed size up to 600 KiB, no thumb, first frame only |
+
+`prepare*` answers `PreparedMedia`: the sealed `image` (and `thumb`), `w`, `h`, `thumbhash` (the placeholder) and `seal`, an opaque handle that keeps the key in Core. Write `image` and `thumb` to files, then queue them:
+
+1. `enqueueUpload(NewMediaUpload(album, position, conversationId, imageRef, thumbRef, seal))`: `thumbRef` exactly for an image. A room backdrop takes the room chat id. Answers `MediaUploadRow`.
+2. `reserveUpload(id)`: `PutTargets(expiresAt, image, thumb)`. Reserve again after `expiresAt`; the same row keeps its ids.
+3. `PUT` the image file. Report `uploadProgress(id, IMAGE, partsSent, stageId)` while it goes and `uploadObjectDone(id, IMAGE)` after it. An image then sends its thumb the same way (`THUMB`).
+4. `commitUpload(id)`. `MediaMissing` puts the row back on the missing object: `PUT` it again and commit. `NotFound` means the reserve expired: the row is `QUEUED` again. When the row was removed while the commit ran, `NotFound` too, and Core deletes the server copy.
+5. On a network error `uploadFailed(id, retryable = true)` and retry; `retryable = false` ends it as `FAILED`. `uploadRestart(id)` starts a row over, `uploadRedo(id, object)` sends one object again, `removeAlbumUploads(album)` cancels an album and `removeUpload(id)` one row of it (delete the files they answer; `null` when the row is already gone).
+
+`uploads()`, `upload(id)`, `albumUploads(album)` and `nextUpload()` read the queue; it survives app restarts. `CoreEvent.MediaUploads` carries every change, `removed` the cancelled ids. After `sendAlbum`, `setGroupAvatar` or `setRoomBackdrop` answers, the message holds the keys: call `removeAlbumUploads(album)` or `removeUpload(id)` and keep the files only as a cache.
+
+| Call | Notes |
+|---|---|
+| `sendAlbum(SendInput, album)` | posts the album once every upload of it is `COMMITTED` (`NotReady` before); up to 10 images, 4 in a room. `Invalid` for a `FAILED` row, a non-image row or a row of another chat |
+| `setGroupAvatar(id, AvatarChange.Set(uploadId))` | a committed avatar upload of this group; `Clear` drops it. Rides a meta message |
+| `setRoomBackdrop(roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it. `Invalid` for a chat that is not a room, `NotFound` when its room code is not known yet. `BackdropCooldown(until)`: an image was taken down by reports, no new image until then |
+| `setRoomPreset(roomChatId, presetId)` | a bundled preset; also queues a room meta without the image. `null` when the known room meta has no image |
+| `reportBackdrop(BackdropReport(conversationId, mediaId, reason, comment))` | a member reports the room backdrop on screen, never the host; comment up to 500 chars. `MediaMissing` means the room shows another backdrop now |
+| `mediaInfo(conversationId, mediaId)` | size, `w`, `h`, `thumbhash` and the thumb id of an album image, a group avatar or a room backdrop |
+| `mediaUrls(conversationId, ids)` | presigned `GET` urls, 15 min; `DELETED` shows "Картинка удалена", `LOST` "Картинка недоступна" |
+| `openImage(conversationId, mediaId, ciphertext)` | checks and decrypts the downloaded bytes: `OpenedMedia(bytes, mime, w, h)`, JPEG or PNG |
+| `openThumb(conversationId, mediaId, ciphertext)` | the same for the thumb of an image (`mediaId` is the image id) |
+| `mediaUsage()`, `mediaMine(MineQuery)` | storage: quota, per chat, own files |
+| `deleteMedia(MediaSelection)`, `restoreMedia(MediaSelection)` | delete for everyone in every chat; restore within 15 s |
+
+The room view (`backdrop` in the room state) decides what to draw. For `{"kind": "image", "mediaId"}` resolve it with `mediaInfo(roomChatId, mediaId)`, fetch it with `mediaUrls(roomChatId, [mediaId])` and open it with `openImage`; `null` from `mediaInfo` means the key has not arrived: draw the cover. The server can drop a backdrop without a new room meta, so draw only what the room state names; a room summary never carries `avatarMediaId`. When Core reads a new room meta, `CoreEvent.Sync` brings the room summary: resolve again then. A 404 on a `GET` asks `mediaUrls` once more, then shows the placeholder.
 
 ### Devices
 
@@ -144,11 +185,13 @@ Keep the list and the open thread in sync with `CoreEvent.Sync` (changed convers
 
 ### Errors
 
-Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
+Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The usual ones: `NotReady` (phase is not `READY`), `Offline`, `Busy(retryMs)`, `SlowMode(retryMs)`, `Muted(until)`, `TooYoung`, `Invalid`, `NotFound`. Media adds `QuotaExceeded(used, quota)`, `MediaStarRequired`, `RoomStarRequired`, `BackdropCooldown(until)`, `MediaUploadsPaused` and `MediaMissing(ids)`. A malformed answer is `ProtocolException` in Kotlin and `ProtocolError` in Swift.
 
 ## Storage
 
-- The store is SQLite at `<dataDir>/chat.db` with `-wal` and `-shm`, mode 0600. Use app-private storage (Android `filesDir`, iOS Application Support) and keep it out of backups.
+- The store is SQLite at `<dataDir>/chat.db` with `-wal` and `-shm`, mode 0600. Use app-private storage (Android `filesDir`, iOS Application Support). Exclude the whole `dataDir` from OS backups, not single files, since Core adds files next to `chat.db`: Android leaves the folder out in `dataExtractionRules` and `fullBackupContent`, iOS sets `isExcludedFromBackup` on the folder.
+- If the database key is gone or no longer opens `chat.db`, Core moves the old file aside to `chat.db.orphan-<unix s>` (with its `-wal` and `-shm`) and starts a fresh store; the newest 2 orphans stay. A store with no chats left is removed instead. A `-wal` or `-shm` found without its `chat.db` is parked under a fresh orphan name of its own, never next to an older orphan, and the newest 2 of those stay too. Only files named exactly `chat.db.orphan-<digits>` with an optional `-wal` or `-shm` count as orphans. Sign out, log out and a revoke delete every orphan, and also `chat.db` when no store is open (keychain denied or unavailable); the keys are erased even when a file cannot be removed.
 - Message bodies, previews, titles, drafts, people and conversation keys are sealed with XChaCha20-Poly1305 under subkeys of `KeyName.DATABASE`; the search index uses keyed tokens. Ids, seqs and timestamps are plain.
 - `ChatKeys` holds four secrets: `DATABASE` (32 random bytes, the store key), `DEVICE_ID` (16 bytes), `DEVICE_AUTH` (Ed25519 seed) and `DEVICE_BOX` (X25519 secret). Android: encrypt them with an Android Keystore key. iOS: Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. They must never leave the device.
+- `ChatKeys` throws `KeyFailure.Denied` when the user refuses access (Android biometric cancel, iOS user cancel) and `KeyFailure.Unavailable` for anything else. A denial never drops the store or the device keys.
 - A lost `DATABASE` key drops the store, sync fills it again. Lost device keys make a new device: relogin, and old history waits for a confirm.

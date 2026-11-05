@@ -3,6 +3,7 @@ use sc_chat::{
     ListFilter, ListQuery, MemberRole, MemberState, Message, MessagePreview, Millis, NotifyLevel,
     PeerMark, PreviewKind, RichText, Seq, ThreadSnapshot, UserId, UserRef,
 };
+use uuid::Uuid;
 
 #[uniffi::remote(Enum)]
 pub enum ConversationKind {
@@ -47,6 +48,7 @@ pub struct UserRef {
 pub enum PreviewKind {
     Text,
     Embed,
+    Image,
     System,
     Deleted,
     Locked,
@@ -69,6 +71,7 @@ pub struct ConversationSummary {
     pub kind: ConversationKind,
     pub title: Option<String>,
     pub avatar_url: Option<String>,
+    pub avatar_media_id: Option<Uuid>,
     pub peer: Option<UserRef>,
     pub role: MemberRole,
     pub state: MemberState,

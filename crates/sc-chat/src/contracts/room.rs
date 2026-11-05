@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use uuid::Uuid;
 
 use super::conversation::UserRef;
 use super::embed::Embed;
@@ -12,7 +13,41 @@ pub struct RoomPreview {
     pub host: UserRef,
     pub track: Option<Embed>,
     pub listeners: u32,
+    pub capacity: u32,
+    pub star_host: bool,
+    pub cover: Option<RoomCover>,
+    pub backdrop: Option<RoomBackdrop>,
     pub alive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomCover {
+    pub url: String,
+    pub accent: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum RoomBackdrop {
+    Preset {
+        id: String,
+    },
+    Image {
+        #[serde(alias = "media_id")]
+        media_id: Uuid,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomImages {
+    Members,
+    Mods,
+    Off,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,4 +70,26 @@ pub struct RoomSettingsPatch {
     pub slow_mode_s: Option<u32>,
     pub chat_enabled: Option<bool>,
     pub links: Option<bool>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cover: Option<Option<RoomCover>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_images: Option<RoomImages>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub backdrop: Option<Option<RoomBackdrop>>,
+}
+
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use super::ids::Millis;
 use super::traits::TransportError;
@@ -47,12 +48,22 @@ pub enum ChatError {
     Disabled,
     #[error("sending is paused")]
     SendPaused,
+    #[error("the media quota is full, {used} of {quota} bytes")]
+    QuotaExceeded { used: u64, quota: u64 },
+    #[error("sending images needs STAR")]
+    MediaStarRequired,
+    #[error("images in this room need a STAR host")]
+    RoomStarRequired,
+    #[error("the room image backdrop is paused until {until}")]
+    BackdropCooldown { until: Millis },
+    #[error("image uploads are paused")]
+    MediaUploadsPaused,
+    #[error("some media is missing")]
+    MediaMissing { ids: Vec<Uuid> },
     #[error("the request is invalid")]
     Invalid,
     #[error("not found")]
     NotFound,
-    #[error("not implemented")]
-    Unimplemented,
     #[error("the server failed")]
     Internal,
     #[error("no tier reached the server")]
@@ -63,6 +74,8 @@ pub enum ChatError {
     Store,
     #[error("the keychain failed")]
     Keychain,
+    #[error("the user denied keychain access")]
+    KeychainDenied,
     #[error("a key or ciphertext did not open")]
     Crypto,
     #[error("the answer is malformed")]
@@ -103,9 +116,21 @@ impl ChatError {
             "too_young" => Self::TooYoung,
             "disabled" => Self::Disabled,
             "send_paused" => Self::SendPaused,
+            "quota_exceeded" => Self::QuotaExceeded {
+                used: unsigned("used"),
+                quota: unsigned("quota"),
+            },
+            "media_star_required" => Self::MediaStarRequired,
+            "room_star_required" => Self::RoomStarRequired,
+            "backdrop_cooldown" => Self::BackdropCooldown {
+                until: signed("until"),
+            },
+            "media_uploads_paused" => Self::MediaUploadsPaused,
+            "media_missing" => Self::MediaMissing {
+                ids: uuids(body.get("ids")),
+            },
             "invalid" => Self::Invalid,
             "not_found" => Self::NotFound,
-            "unimplemented" => Self::Unimplemented,
             "internal" => Self::Internal,
             _ => Self::Protocol,
         }
@@ -117,6 +142,16 @@ impl ChatError {
             _ => None,
         }
     }
+}
+
+fn uuids(value: Option<&Value>) -> Vec<Uuid> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|id| Uuid::parse_str(id).ok())
+        .collect()
 }
 
 impl From<sc_chat_wire::WireError> for ChatError {

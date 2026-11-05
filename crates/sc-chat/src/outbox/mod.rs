@@ -1,5 +1,6 @@
 mod rows;
 
+use std::fmt;
 use std::sync::Arc;
 
 use rusqlite::params;
@@ -8,9 +9,9 @@ use crate::contracts::{
     ChatError, ChatResult, ClientId, ConvId, DeliveryState, Message, MessageBody, MessageClass,
     Millis, Seq,
 };
-use crate::store::{Store, StoredContent, StoredMessage, messages, meta, project, seal};
+use crate::store::{Hidden, Store, StoredContent, StoredMessage, messages, meta, project, seal};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OutboxItem {
     pub client_id: ClientId,
     pub conversation_id: ConvId,
@@ -20,6 +21,21 @@ pub struct OutboxItem {
     pub created_at: Millis,
     pub attempts: u32,
     pub next_at: Millis,
+}
+
+impl fmt::Debug for OutboxItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OutboxItem")
+            .field("client_id", &self.client_id)
+            .field("conversation_id", &self.conversation_id)
+            .field("class", &self.class)
+            .field("target_seq", &self.target_seq)
+            .field("envelope", &Hidden(self.envelope.len()))
+            .field("created_at", &self.created_at)
+            .field("attempts", &self.attempts)
+            .field("next_at", &self.next_at)
+            .finish()
+    }
 }
 
 pub struct Outbox {
@@ -183,6 +199,7 @@ fn pending(item: &OutboxItem, sender: String, failed: bool) -> Message {
         mentions: Vec::new(),
         mentions_me: false,
         embeds: Vec::new(),
+        attachments: Vec::new(),
         forwarded_from: None,
         reactions: Vec::new(),
         pinned: false,

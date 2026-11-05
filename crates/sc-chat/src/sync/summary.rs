@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::api::wire::ConversationView;
 use crate::contracts::{
     ConversationSummary, MemberRole, MemberState, Message, MessageBody, MessagePreview,
@@ -8,6 +10,7 @@ pub const PREVIEW_CHARS: usize = 120;
 
 pub struct Facts {
     pub title: Option<String>,
+    pub avatar_media_id: Option<Option<Uuid>>,
     pub peer: Option<UserRef>,
     pub history_locked: bool,
 }
@@ -33,6 +36,9 @@ pub fn from_view(
             .as_ref()
             .and_then(|peer| peer.avatar_url.clone())
             .or_else(|| existing.and_then(|summary| summary.avatar_url.clone())),
+        avatar_media_id: facts
+            .avatar_media_id
+            .unwrap_or_else(|| existing.and_then(|summary| summary.avatar_media_id)),
         peer: facts
             .peer
             .or_else(|| existing.and_then(|summary| summary.peer.clone())),
@@ -103,6 +109,11 @@ pub fn preview(message: &Message, seq: i64) -> MessagePreview {
     let (kind, text) = match &message.body {
         MessageBody::Text(rich) if rich.text.trim().is_empty() && !message.embeds.is_empty() => {
             (PreviewKind::Embed, message.embeds[0].title.clone())
+        }
+        MessageBody::Text(rich)
+            if rich.text.trim().is_empty() && !message.attachments.is_empty() =>
+        {
+            (PreviewKind::Image, String::new())
         }
         MessageBody::Text(rich) => (PreviewKind::Text, rich.text.clone()),
         MessageBody::System(event) if event.kind == SystemKind::Deleted => {

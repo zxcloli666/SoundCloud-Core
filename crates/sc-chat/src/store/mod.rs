@@ -1,3 +1,5 @@
+mod attachments;
+mod backdrop;
 mod ck;
 pub(crate) mod codec;
 mod content;
@@ -6,20 +8,30 @@ mod dbkey;
 mod drafts;
 mod embeds;
 pub mod expiry;
+mod gallery;
+mod group_meta;
 mod history;
 mod items;
 mod local;
+mod media;
+mod media_commit;
+mod media_rows;
+mod media_watch;
 pub(crate) mod messages;
 pub(crate) mod meta;
 pub mod migrations;
+mod orphan;
 mod people;
+mod pins;
 pub(crate) mod project;
 mod purge;
 pub(crate) mod seal;
 
-use std::path::Path;
+use std::collections::HashSet;
+use std::fmt;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicI64;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use hmac::{Hmac, Mac};
 use rusqlite::Connection;
@@ -28,11 +40,14 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::contracts::{
-    ChatError, ChatResult, ClientId, ConvId, DeviceId, KeyStore, MessageClass, Millis, Seq,
+    ChatError, ChatResult, ClientId, ConvId, DeviceId, Events, KeyStore, MessageClass, Millis, Seq,
     SystemEvent, UserId,
 };
 
+pub use crate::contracts::{UploadObject, UploadState};
 pub use expiry::ExpiryTimer;
+pub use media_rows::{MediaUpload, NewUpload, Reserved};
+pub use orphan::{ORPHANS_KEPT, remove_database, remove_orphans};
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";
@@ -64,12 +79,31 @@ pub struct SyncState {
     pub inc: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum StoredContent {
     Open(Vec<u8>),
     Sealed(Vec<u8>),
     System(SystemEvent),
     Deleted,
+}
+
+impl fmt::Debug for StoredContent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open(bytes) => f.debug_tuple("Open").field(&Hidden(bytes.len())).finish(),
+            Self::Sealed(bytes) => f.debug_tuple("Sealed").field(&Hidden(bytes.len())).finish(),
+            Self::System(event) => f.debug_tuple("System").field(event).finish(),
+            Self::Deleted => f.write_str("Deleted"),
+        }
+    }
+}
+
+pub(crate) struct Hidden(pub(crate) usize);
+
+impl fmt::Debug for Hidden {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{} bytes>", self.0)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,33 +126,41 @@ pub struct Store {
     conn: Mutex<Connection>,
     keys: StoreKeys,
     compacted_at: AtomicI64,
+    uploads_watch: RwLock<Option<Arc<dyn Events>>>,
+    committed: Mutex<HashSet<Uuid>>,
+    path: Option<PathBuf>,
 }
 
 impl Store {
     pub fn open(path: &Path, master: &[u8; 32]) -> ChatResult<Self> {
         dbkey::owner_only(path)?;
-        Self::with_connection(Connection::open(path)?, master)
+        Self::with_connection(Connection::open(path)?, master, Some(path))
     }
 
     pub fn open_in_memory(master: &[u8; 32]) -> ChatResult<Self> {
-        Self::with_connection(Connection::open_in_memory()?, master)
+        Self::with_connection(Connection::open_in_memory()?, master, None)
     }
 
     pub fn open_keyed(path: &Path, keys: &dyn KeyStore) -> ChatResult<Self> {
+        orphan::set_strays_aside(path)?;
         let (master, fresh) = dbkey::load_or_create(keys)?;
         if fresh {
-            dbkey::remove_files(path)?;
+            orphan::set_aside(path)?;
         }
         match Self::open(path, &master) {
             Err(ChatError::Crypto) => {
-                dbkey::remove_files(path)?;
+                orphan::set_aside(path)?;
                 Self::open(path, &master)
             }
             opened => opened,
         }
     }
 
-    fn with_connection(conn: Connection, master: &[u8; 32]) -> ChatResult<Self> {
+    fn with_connection(
+        conn: Connection,
+        master: &[u8; 32],
+        path: Option<&Path>,
+    ) -> ChatResult<Self> {
         migrations::prepare(&conn)?;
         migrations::migrate(&conn)?;
         let keys = StoreKeys::derive(master)?;
@@ -127,6 +169,9 @@ impl Store {
             conn: Mutex::new(conn),
             keys,
             compacted_at: AtomicI64::new(Millis::MIN),
+            uploads_watch: RwLock::new(None),
+            committed: Mutex::new(HashSet::new()),
+            path: path.map(Path::to_path_buf),
         })
     }
 

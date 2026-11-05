@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::media::MediaConfigView;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigView {
     pub enabled: bool,
@@ -13,6 +15,8 @@ pub struct ConfigView {
     pub limits: LimitsView,
     #[serde(default)]
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub media: MediaConfigView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

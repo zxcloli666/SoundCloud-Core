@@ -35,35 +35,6 @@ fn a_wrong_key_is_refused() {
     assert!(Store::open(&path, &[1; 32]).is_ok());
 }
 
-#[test]
-fn a_lost_key_starts_a_fresh_database() {
-    let dir = TempDir::new("lost");
-    let path = dir.file("chat.db");
-    let keys = MemoryKeys::default();
-    Store::open_keyed(&path, &keys)
-        .unwrap()
-        .put_messages(&[post(conv(), 1, PEER, "потеряется")])
-        .unwrap();
-    keys.delete(KeyName::Database).unwrap();
-    let store = Store::open_keyed(&path, &keys).unwrap();
-    let count: i64 = store
-        .conn()
-        .unwrap()
-        .query_row("SELECT count(*) FROM messages", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
-}
-
-#[test]
-fn a_replaced_key_starts_a_fresh_database() {
-    let dir = TempDir::new("replaced");
-    let path = dir.file("chat.db");
-    let keys = MemoryKeys::default();
-    drop(Store::open_keyed(&path, &keys).unwrap());
-    keys.save(KeyName::Database, &[8; 32]).unwrap();
-    assert!(Store::open_keyed(&path, &keys).is_ok());
-}
-
 #[cfg(unix)]
 #[test]
 fn the_database_files_are_for_the_owner_only() {

@@ -92,6 +92,7 @@ impl<L: Local> SyncEngine<L> {
         if behind && entry.messages.is_empty() {
             messages.extend(self.catch_up(entry.id, summary.last_seq).await?);
         }
+        self.room_meta(&mut summary, false).await?;
         messages.sort_by_key(|message| message.seq);
         summary::absorb(&mut summary, &messages);
         let marks = self.take_marks(entry, &mut summary)?;
@@ -174,6 +175,10 @@ impl<L: Local> SyncEngine<L> {
             for id in gone {
                 state.marks.forget(*id);
                 state.epochs.remove(id);
+                state.room_meta_due.remove(id);
+                state.room_meta_read.remove(id);
+                state.room_meta_locked.remove(id);
+                state.room_meta_misses.remove(id);
             }
         });
         let mut touched: Vec<ConvId> = messages.iter().map(|gone| gone.conversation_id).collect();

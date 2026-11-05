@@ -4,7 +4,7 @@ use super::{StoredContent, StoredMessage};
 use crate::contracts::{
     DeliveryState, Message, MessageBody, MessageClass, PeerMark, ReactionGroup, RichText, SpanKind,
 };
-use crate::envelope::Content;
+use crate::envelope::{Content, attachments};
 
 #[derive(Default, Clone, Copy)]
 pub struct Context<'a> {
@@ -34,6 +34,7 @@ pub fn message(item: &Item, modifiers: &[&Item], context: Context<'_>) -> Messag
         mentions: Vec::new(),
         mentions_me: false,
         embeds: Vec::new(),
+        attachments: Vec::new(),
         forwarded_from: None,
         reactions: Vec::new(),
         pinned: false,
@@ -56,6 +57,11 @@ pub fn fill_body(message: &mut Message, stored: &StoredContent) {
                 message.reply_to = post.reply_to;
                 message.mentions = post.mentions;
                 message.embeds = post.embeds;
+                message.attachments = post
+                    .attachments
+                    .iter()
+                    .filter_map(attachments::view)
+                    .collect();
                 message.forwarded_from = post.forwarded_from;
                 MessageBody::Text(post.text)
             }
@@ -88,6 +94,7 @@ fn apply(message: &mut Message, modifier: &Item) {
         Content::Delete { target } if aims(target) && same_sender => {
             message.body = MessageBody::Deleted;
             message.embeds.clear();
+            message.attachments.clear();
             message.mentions.clear();
             message.forwarded_from = None;
         }

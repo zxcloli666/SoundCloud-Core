@@ -33,8 +33,21 @@ impl<L: Local> SyncEngine<L> {
         conversation_id: ConvId,
         from_epoch: u32,
     ) -> ChatResult<Vec<u32>> {
+        let mut opened = Vec::new();
+        let fetched = self
+            .key_pages(conversation_id, from_epoch, &mut opened)
+            .await;
+        let installed = self.install_keys(conversation_id, &opened)?;
+        fetched.map(|()| installed)
+    }
+
+    async fn key_pages(
+        &self,
+        conversation_id: ConvId,
+        from_epoch: u32,
+        opened: &mut Vec<(u32, Ck)>,
+    ) -> ChatResult<()> {
         let mut from = from_epoch;
-        let mut installed = BTreeSet::new();
         for _ in 0..KEYS_PAGES_MAX {
             let page = self.api.keys(conversation_id, Some(from)).await?;
             for key in &page {
@@ -42,8 +55,7 @@ impl<L: Local> SyncEngine<L> {
                     continue;
                 };
                 if let Ok(ck) = self.cipher.open_ck(conversation_id, epoch, &key.sealed) {
-                    self.store.put_ck(conversation_id, epoch, &ck)?;
-                    installed.insert(epoch);
+                    opened.push((epoch, ck));
                 }
             }
             let newest = page
@@ -55,18 +67,39 @@ impl<L: Local> SyncEngine<L> {
                 _ => break,
             }
         }
+        Ok(())
+    }
+
+    fn install_keys(&self, conversation_id: ConvId, opened: &[(u32, Ck)]) -> ChatResult<Vec<u32>> {
+        let mut installed = BTreeSet::new();
+        let mut done = Ok(());
+        for (epoch, ck) in opened {
+            match self.store.put_ck(conversation_id, *epoch, ck) {
+                Ok(()) => {
+                    installed.insert(*epoch);
+                }
+                Err(error) => done = done.and(Err(error)),
+            }
+        }
         if let Some(newest) = installed.last() {
+            let now = self.now();
             self.with(|state| {
                 state.note_epoch(conversation_id, *newest);
                 for epoch in &installed {
                     state.locked_keys.remove(&(conversation_id, *epoch));
                 }
+                let locked = state.room_meta_locked.get(&conversation_id).copied();
+                if locked.is_some_and(|epoch| installed.contains(&epoch)) {
+                    state.room_meta_locked.remove(&conversation_id);
+                    state.room_meta_due.insert(conversation_id, now);
+                }
             });
         }
         for epoch in &installed {
-            self.reopen(conversation_id, *epoch)?;
+            let reopened = self.reopen(conversation_id, *epoch);
+            done = done.and(reopened);
         }
-        Ok(installed.into_iter().collect())
+        done.map(|()| installed.into_iter().collect())
     }
 
     pub async fn refresh_keys(&self, conversation_id: ConvId) -> ChatResult<Vec<u32>> {

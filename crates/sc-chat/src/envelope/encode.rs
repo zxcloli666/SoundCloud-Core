@@ -2,10 +2,11 @@ use sc_chat_wire::msg::ENVELOPE_VERSION;
 use sc_chat_wire::proto::{self, Envelope, envelope::Body};
 
 use super::snapshot::{embed_to_wire, meta_to_wire};
-use super::{Content, Post, text};
+use super::{Content, Post, attachments, text};
 use crate::contracts::{
-    ChatError, ChatResult, EMBEDS_MAX, Embed, EmbedKind, Forwarded, RichText, Seq,
+    ChatError, ChatResult, ConversationMeta, EMBEDS_MAX, Embed, EmbedKind, Forwarded, RichText, Seq,
 };
+use crate::media::ALBUM_MAX;
 
 pub fn encode(content: &Content) -> ChatResult<Envelope> {
     let body = match content {
@@ -22,7 +23,7 @@ pub fn encode(content: &Content) -> ChatResult<Envelope> {
             emoji: checked_emoji(emoji)?,
             on: *on,
         }),
-        Content::Meta(meta) => Body::Meta(meta_to_wire(meta)),
+        Content::Meta(meta) => return meta_envelope(meta),
         Content::Pin { target, on } => Body::Pin(proto::Pin {
             target: wire_seq(*target)?,
             on: *on,
@@ -40,9 +41,12 @@ pub fn encode(content: &Content) -> ChatResult<Envelope> {
 }
 
 fn post_envelope(post: &Post) -> ChatResult<Envelope> {
-    let empty = post.text.text.trim().is_empty() && post.embeds.is_empty();
+    let empty =
+        post.text.text.trim().is_empty() && post.embeds.is_empty() && post.attachments.is_empty();
     let blank_mention = post.mentions.iter().any(String::is_empty);
-    if empty || blank_mention || post.embeds.len() > EMBEDS_MAX {
+    let bad_album =
+        post.attachments.len() > ALBUM_MAX || !post.attachments.iter().all(attachments::image_ok);
+    if empty || blank_mention || bad_album || post.embeds.len() > EMBEDS_MAX {
         return Err(ChatError::Invalid);
     }
     Ok(Envelope {
@@ -51,7 +55,24 @@ fn post_envelope(post: &Post) -> ChatResult<Envelope> {
         reply_to: post.reply_to.map(wire_seq).transpose()?.unwrap_or_default(),
         mentions: post.mentions.clone(),
         embeds: post.embeds.iter().map(embed_to_wire).collect(),
+        attachments: post.attachments.clone(),
         forwarded_from: post.forwarded_from.as_ref().map(forwarded).transpose()?,
+        ..Envelope::default()
+    })
+}
+
+fn meta_envelope(meta: &ConversationMeta) -> ChatResult<Envelope> {
+    if meta
+        .avatar
+        .as_ref()
+        .is_some_and(|avatar| !attachments::meta_image_ok(avatar))
+    {
+        return Err(ChatError::Invalid);
+    }
+    Ok(Envelope {
+        v: ENVELOPE_VERSION,
+        body: Some(Body::Meta(meta_to_wire(meta))),
+        attachments: meta.avatar.clone().into_iter().collect(),
         ..Envelope::default()
     })
 }

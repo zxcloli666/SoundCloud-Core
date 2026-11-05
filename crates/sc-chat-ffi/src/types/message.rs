@@ -1,7 +1,8 @@
 use sc_chat::{
     ClientId, ConvId, DeliveryState, DeviceId, Embed, Forwarded, GoneMessage, HistoryPage,
-    HistoryQuery, MemberRole, Message, MessageBody, MessageRef, Millis, PeerMark, ReactionGroup,
-    RichText, SendInput, Seq, Span, SpanKind, SystemEvent, SystemKind, UserId,
+    HistoryQuery, MemberRole, Message, MessageAttachment, MessageBody, MessageRef, Millis,
+    PeerMark, ReactionGroup, RichText, SendInput, Seq, Span, SpanKind, SystemEvent, SystemKind,
+    UserId,
 };
 
 #[uniffi::remote(Enum)]
@@ -112,6 +113,7 @@ pub struct Message {
     pub mentions: Vec<UserId>,
     pub mentions_me: bool,
     pub embeds: Vec<Embed>,
+    pub attachments: Vec<MessageAttachment>,
     pub forwarded_from: Option<Forwarded>,
     pub reactions: Vec<ReactionGroup>,
     pub pinned: bool,

@@ -1,0 +1,76 @@
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+use sc_chat::KeyName;
+use sc_chat_ffi::{ChatKeys, KeyFailure};
+
+type Hook = Box<dyn Fn() + Send + Sync>;
+
+#[derive(Default)]
+pub struct MemoryKeys {
+    secrets: Mutex<HashMap<KeyName, Vec<u8>>>,
+    denied: AtomicBool,
+    unavailable: AtomicBool,
+    calls: AtomicUsize,
+    hook: Mutex<Option<Hook>>,
+}
+
+impl MemoryKeys {
+    pub fn names(&self) -> Vec<KeyName> {
+        self.secrets.lock().unwrap().keys().copied().collect()
+    }
+
+    pub fn deny(&self, denied: bool) {
+        self.denied.store(denied, Ordering::SeqCst);
+    }
+
+    pub fn break_down(&self, unavailable: bool) {
+        self.unavailable.store(unavailable, Ordering::SeqCst);
+    }
+
+    pub fn on_ask(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.hook.lock().unwrap() = Some(Box::new(hook));
+    }
+
+    pub fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+
+    fn ask(&self) -> Result<(), KeyFailure> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(hook) = self.hook.lock().unwrap().as_ref() {
+            hook();
+        }
+        if self.denied.load(Ordering::SeqCst) {
+            return Err(KeyFailure::Denied {
+                reason: "the user pressed Deny".into(),
+            });
+        }
+        if self.unavailable.load(Ordering::SeqCst) {
+            return Err(KeyFailure::Unavailable {
+                reason: "the keychain is locked".into(),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl ChatKeys for MemoryKeys {
+    fn load(&self, name: KeyName) -> Result<Option<Vec<u8>>, KeyFailure> {
+        self.ask()?;
+        Ok(self.secrets.lock().unwrap().get(&name).cloned())
+    }
+
+    fn save(&self, name: KeyName, secret: Vec<u8>) -> Result<(), KeyFailure> {
+        self.ask()?;
+        self.secrets.lock().unwrap().insert(name, secret);
+        Ok(())
+    }
+
+    fn delete(&self, name: KeyName) -> Result<(), KeyFailure> {
+        self.ask()?;
+        self.secrets.lock().unwrap().remove(&name);
+        Ok(())
+    }
+}

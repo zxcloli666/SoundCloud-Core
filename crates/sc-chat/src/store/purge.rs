@@ -11,8 +11,10 @@ pub const COMPACTION_GAP_MS: Millis = 60_000;
 
 const SEARCH_OWED: &str = "search_owed";
 
-const CONVERSATION_TABLES: [&str; 8] = [
+const CONVERSATION_TABLES: [&str; 10] = [
     "message_embeds",
+    "message_media",
+    "group_meta",
     "messages",
     "members",
     "marks",
@@ -22,8 +24,11 @@ const CONVERSATION_TABLES: [&str; 8] = [
     "hidden_messages",
 ];
 
-const WIPED_TABLES: [&str; 10] = [
+const WIPED_TABLES: [&str; 13] = [
     "message_embeds",
+    "message_media",
+    "group_meta",
+    "media_uploads",
     "messages",
     "members",
     "marks",
@@ -116,7 +121,11 @@ impl Store {
         tx.commit()?;
         conn.execute("INSERT INTO search (search) VALUES ('optimize')", [])?;
         conn.execute_batch("VACUUM")?;
-        checkpoint(&conn)
+        checkpoint(&conn)?;
+        if let Some(path) = &self.path {
+            let _ = super::orphan::remove_orphans(path);
+        }
+        Ok(())
     }
 }
 
@@ -195,6 +204,8 @@ fn drop_message(tx: &Connection, keys: &StoreKeys, conv: ConvId, seq: Seq) -> Ch
 pub fn drop_row(tx: &Connection, id: i64) -> ChatResult<()> {
     index::remove(tx, id)?;
     tx.prepare_cached("DELETE FROM message_embeds WHERE message_id = ?1")?
+        .execute([id])?;
+    tx.prepare_cached("DELETE FROM message_media WHERE message_id = ?1")?
         .execute([id])?;
     tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?
         .execute([id])?;

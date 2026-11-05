@@ -3,10 +3,12 @@ use std::time::Duration;
 const RETRY_MIN_MS: u64 = 2_000;
 const RETRY_MAX_MS: u64 = 60_000;
 
+pub const FLOOR: Duration = Duration::from_millis(RETRY_MIN_MS);
+
 pub fn backoff(failures: u32) -> Duration {
     let exponent = failures.saturating_sub(1).min(5);
     let pause_ms = (RETRY_MIN_MS << exponent).min(RETRY_MAX_MS);
-    Duration::from_millis(spread(pause_ms))
+    Duration::from_millis(spread(pause_ms).min(RETRY_MAX_MS))
 }
 
 pub fn busy(retry_ms: u64) -> Duration {
@@ -53,6 +55,13 @@ mod tests {
                 pause >= base * 4 / 5 && pause <= base * 6 / 5,
                 "{failures}: {pause}"
             );
+        }
+    }
+
+    #[test]
+    fn backoff_never_passes_a_minute() {
+        for _ in 0..200 {
+            assert!(backoff(40).as_millis() <= 60_000);
         }
     }
 

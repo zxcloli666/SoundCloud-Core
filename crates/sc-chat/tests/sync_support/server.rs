@@ -16,6 +16,8 @@ pub enum Step {
     Empty(u16, Vec<(String, String)>),
     Fail(ChatError),
     FailAfter(u64, ChatError),
+    Run(Hook, Box<Step>),
+    Stall(Hook),
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +89,31 @@ impl Server {
         *self.done.lock().unwrap() = Some(Box::new(hook));
     }
 
+    fn play(&self, step: Step) -> Result<InnerAnswer, ChatError> {
+        match step {
+            Step::Json(status, body) => Ok(InnerAnswer {
+                status,
+                headers: Vec::new(),
+                body: serde_json::to_vec(&body).unwrap(),
+            }),
+            Step::Empty(status, headers) => Ok(InnerAnswer {
+                status,
+                headers,
+                body: Vec::new(),
+            }),
+            Step::Fail(error) => Err(error),
+            Step::FailAfter(ms, error) => {
+                self.clock.advance(ms);
+                Err(error)
+            }
+            Step::Run(hook, then) => {
+                hook();
+                self.play(*then)
+            }
+            Step::Stall(_) => Err(ChatError::Internal),
+        }
+    }
+
     fn next(&self, call: &InnerCall) -> Option<Step> {
         self.script
             .lock()
@@ -135,22 +162,10 @@ impl Exchange for Server {
             }
             return Err(ChatError::Offline);
         };
-        match step {
-            Step::Json(status, body) => Ok(InnerAnswer {
-                status,
-                headers: Vec::new(),
-                body: serde_json::to_vec(&body).unwrap(),
-            }),
-            Step::Empty(status, headers) => Ok(InnerAnswer {
-                status,
-                headers,
-                body: Vec::new(),
-            }),
-            Step::Fail(error) => Err(error),
-            Step::FailAfter(ms, error) => {
-                self.clock.advance(ms);
-                Err(error)
-            }
+        if let Step::Stall(hook) = step {
+            hook();
+            return std::future::pending().await;
         }
+        self.play(step)
     }
 }

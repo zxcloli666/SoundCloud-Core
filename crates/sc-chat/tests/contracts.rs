@@ -197,3 +197,77 @@ fn embed_queries_filter_by_kind() {
     assert_eq!(query.kinds, vec![EmbedKind::Track, EmbedKind::RoomInvite]);
     assert_eq!(query.before, None);
 }
+
+#[test]
+fn media_errors_map_from_the_server_and_reach_the_webview() {
+    let id = Uuid::from_u128(7);
+    let quota = ChatError::from_server(
+        &json!({"error": "chat_quota_exceeded", "used": 10, "quota": 1_073_741_824u64}),
+    );
+    assert_eq!(
+        quota,
+        ChatError::QuotaExceeded {
+            used: 10,
+            quota: 1_073_741_824
+        }
+    );
+    assert_eq!(
+        to_json(&quota),
+        json!({"code": "quota_exceeded", "used": 10, "quota": 1_073_741_824u64})
+    );
+    let missing = ChatError::from_server(&json!({"error": "chat_media_missing", "ids": [id]}));
+    assert_eq!(missing, ChatError::MediaMissing { ids: vec![id] });
+    assert_eq!(
+        to_json(&missing),
+        json!({"code": "media_missing", "ids": [id]})
+    );
+    for (code, error) in [
+        ("chat_media_star_required", ChatError::MediaStarRequired),
+        ("chat_room_star_required", ChatError::RoomStarRequired),
+        ("chat_media_uploads_paused", ChatError::MediaUploadsPaused),
+    ] {
+        assert_eq!(ChatError::from_server(&json!({"error": code})), error);
+    }
+    assert_eq!(
+        to_json(&ChatError::RoomStarRequired),
+        json!({"code": "room_star_required"})
+    );
+    let bare = ChatError::from_server(&json!({"error": "chat_media_missing"}));
+    assert_eq!(bare, ChatError::MediaMissing { ids: Vec::new() });
+}
+
+#[test]
+fn room_settings_tell_a_cleared_cover_from_an_untouched_one() {
+    use sc_chat::{RoomCover, RoomImages, RoomSettingsPatch};
+
+    let untouched = RoomSettingsPatch {
+        title: Some("Night".into()),
+        ..RoomSettingsPatch::default()
+    };
+    let sent = to_json(&untouched);
+    assert!(sent.get("cover").is_none() && sent.get("roomImages").is_none());
+
+    let cleared = RoomSettingsPatch {
+        cover: Some(None),
+        room_images: Some(RoomImages::Mods),
+        ..RoomSettingsPatch::default()
+    };
+    assert_eq!(to_json(&cleared)["cover"], Value::Null);
+    assert_eq!(to_json(&cleared)["roomImages"], json!("mods"));
+    let back: RoomSettingsPatch = serde_json::from_value(to_json(&cleared)).unwrap();
+    assert_eq!(back, cleared);
+
+    let set = RoomSettingsPatch {
+        cover: Some(Some(RoomCover {
+            url: "https://i1.sndcdn.com/a.jpg".into(),
+            accent: 3,
+        })),
+        ..RoomSettingsPatch::default()
+    };
+    assert_eq!(
+        to_json(&set)["cover"],
+        json!({"url": "https://i1.sndcdn.com/a.jpg", "accent": 3})
+    );
+    let from_webview: RoomSettingsPatch = serde_json::from_value(json!({"title": null})).unwrap();
+    assert_eq!(from_webview.cover, None);
+}
