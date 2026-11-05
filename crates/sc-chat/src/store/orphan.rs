@@ -10,24 +10,76 @@ use crate::contracts::{ChatError, ChatResult};
 pub const ORPHANS_KEPT: usize = 2;
 
 const ORPHAN: &str = ".orphan-";
+const COMPANIONS: [&str; 2] = ["-wal", "-shm"];
 
 pub fn set_aside(path: &Path) -> ChatResult<()> {
     if !holds_chats(path) {
         return remove_files(path);
     }
     let older = orphans(path);
-    let after_newest = older.first().map_or(0, |(at, _)| at + 1);
-    let orphan = sibling(path, &format!("{ORPHAN}{}", unix_now().max(after_newest)));
-    for suffix in ["", "-wal", "-shm"] {
-        match std::fs::rename(sibling(path, suffix), sibling(&orphan, suffix)) {
-            Err(error) if error.kind() != ErrorKind::NotFound => return Err(ChatError::Store),
-            _ => {}
+    let orphan = next_orphan(path, &older);
+    let mut moved = Vec::new();
+    for suffix in ["", COMPANIONS[0], COMPANIONS[1]] {
+        let (from, to) = (sibling(path, suffix), sibling(&orphan, suffix));
+        match std::fs::rename(&from, &to) {
+            Ok(()) => moved.push((from, to)),
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(_) => {
+                for (from, to) in moved.iter().rev() {
+                    let _ = std::fs::rename(to, from);
+                }
+                return Err(ChatError::Store);
+            }
         }
     }
     for (_, stale) in older.into_iter().skip(ORPHANS_KEPT - 1) {
-        remove_files(&stale)?;
+        let _ = remove_files(&stale);
     }
     Ok(())
+}
+
+pub fn set_strays_aside(path: &Path) -> ChatResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+    let older = orphans(path);
+    for suffix in COMPANIONS {
+        let stray = sibling(path, suffix);
+        if !stray.exists() {
+            continue;
+        }
+        let home = match older.first() {
+            Some((_, newest)) if !sibling(newest, suffix).exists() => newest.clone(),
+            _ => next_orphan(path, &older),
+        };
+        std::fs::rename(&stray, sibling(&home, suffix)).map_err(|_| ChatError::Store)?;
+    }
+    Ok(())
+}
+
+pub fn remove_orphans(path: &Path) -> ChatResult<()> {
+    let Some(prefix) = orphan_prefix(path) else {
+        return Ok(());
+    };
+    let mut failed = false;
+    for entry in std::fs::read_dir(folder(path))
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let name = entry.file_name();
+        if name.to_str().is_some_and(|name| name.starts_with(&prefix)) {
+            match std::fs::remove_file(entry.path()) {
+                Err(error) if error.kind() != ErrorKind::NotFound => failed = true,
+                _ => {}
+            }
+        }
+    }
+    if failed {
+        Err(ChatError::Store)
+    } else {
+        Ok(())
+    }
 }
 
 fn holds_chats(path: &Path) -> bool {
@@ -55,16 +107,16 @@ fn holds_chats(path: &Path) -> bool {
     }
 }
 
+fn next_orphan(path: &Path, older: &[(u64, PathBuf)]) -> PathBuf {
+    let after_newest = older.first().map_or(0, |(at, _)| at + 1);
+    sibling(path, &format!("{ORPHAN}{}", unix_now().max(after_newest)))
+}
+
 fn orphans(path: &Path) -> Vec<(u64, PathBuf)> {
-    let dir = match path.parent() {
-        Some(dir) if !dir.as_os_str().is_empty() => dir,
-        _ => Path::new("."),
-    };
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+    let Some(prefix) = orphan_prefix(path) else {
         return Vec::new();
     };
-    let prefix = format!("{name}{ORPHAN}");
-    let mut found: Vec<(u64, PathBuf)> = std::fs::read_dir(dir)
+    let mut found: Vec<(u64, PathBuf)> = std::fs::read_dir(folder(path))
         .into_iter()
         .flatten()
         .flatten()
@@ -76,6 +128,18 @@ fn orphans(path: &Path) -> Vec<(u64, PathBuf)> {
         .collect();
     found.sort_unstable_by_key(|(at, _)| std::cmp::Reverse(*at));
     found
+}
+
+fn orphan_prefix(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    Some(format!("{name}{ORPHAN}"))
+}
+
+fn folder(path: &Path) -> &Path {
+    match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    }
 }
 
 fn unix_now() -> u64 {

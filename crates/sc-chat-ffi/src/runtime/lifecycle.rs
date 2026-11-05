@@ -2,9 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use sc_chat::api::{Api, Identity};
-use sc_chat::crypto::DeviceKeys;
-use sc_chat::{ChatError, ChatPhase, ChatResult, HistoryGate, KeyName, KeyStore};
+use sc_chat::{ChatError, ChatPhase};
 
 use super::session::{AuthMove, Seen, auth_move};
 use super::{Chat, Core, retry};
@@ -57,54 +55,6 @@ impl Chat {
         }
     }
 
-    pub async fn log_out(&self) -> ChatResult<()> {
-        let _ = self.api.remove_this_device().await;
-        self.session.log_out();
-        self.wipe(true).await
-    }
-
-    async fn drop_device(&self, identity: Option<Identity>) {
-        let _ = self.wipe(true).await;
-        let Some(identity) = identity else {
-            return;
-        };
-        let api = Api::new(self.api.channel().clone(), self.api.transport().clone());
-        api.set_identity(Some(identity));
-        let _ = api.remove_this_device().await;
-    }
-
-    pub async fn wipe(&self, forget_device: bool) -> ChatResult<()> {
-        let _lifecycle = self.lifecycle.lock().await;
-        self.forget_user();
-        let core = self.core.write().ok().and_then(|mut core| core.take());
-        self.api.set_identity(None);
-        self.session.wiped();
-        self.restart();
-        let keys = self.keys.clone();
-        let wiped = self
-            .handle
-            .spawn_blocking(move || {
-                if let Some(core) = core {
-                    core.store.wipe()?;
-                }
-                if forget_device {
-                    DeviceKeys::erase(keys.as_ref())?;
-                    keys.delete(KeyName::Database)?;
-                }
-                Ok(())
-            })
-            .await
-            .unwrap_or(Err(ChatError::Internal));
-        self.feed.update(|status| {
-            status.device_id = None;
-            status.history = HistoryGate::default();
-            status.unread = 0;
-            status.mentions = 0;
-            status.requests = 0;
-        });
-        wiped
-    }
-
     pub fn halt(&self, error: &ChatError, failures: u32) -> Halt {
         match error {
             ChatError::ReloginRequired => Halt::Phase(ChatPhase::Unbound),
@@ -130,7 +80,7 @@ impl Chat {
         }
     }
 
-    fn forget_user(&self) {
+    pub(super) fn forget_user(&self) {
         if let Some(core) = self.core() {
             core.sync.set_user(None);
         }
@@ -152,10 +102,16 @@ impl Chat {
     }
 
     async fn settle(&self, halt: Halt, generation: u64, seen: &Seen) {
+        self.retry_asked.store(false, Ordering::SeqCst);
         match halt {
             Halt::Restart => {}
             Halt::Retry(pause) => {
-                self.feed.update(|status| status.online = false);
+                self.feed.update(|status| {
+                    status.online = false;
+                    if status.phase == ChatPhase::KeychainUnavailable {
+                        status.phase = ChatPhase::Starting;
+                    }
+                });
                 self.pause(pause, generation).await;
             }
             Halt::Wait(phase, pause) => {
@@ -165,7 +121,7 @@ impl Chat {
                 });
                 let floor = pause.min(retry::FLOOR);
                 tokio::time::sleep(floor).await;
-                self.pause(pause - floor, generation).await;
+                self.until_retry(Some(pause - floor), generation).await;
             }
             Halt::Phase(phase) => {
                 let generation = match phase {
@@ -185,11 +141,13 @@ impl Chat {
                 } else {
                     generation
                 };
-                if phase == ChatPhase::Off {
-                    let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);
-                    self.pause(Duration::from_millis(recheck), generation).await;
-                } else {
-                    self.restarted(generation).await;
+                match phase {
+                    ChatPhase::Off => {
+                        let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);
+                        self.pause(Duration::from_millis(recheck), generation).await;
+                    }
+                    ChatPhase::KeychainDenied => self.until_retry(None, generation).await,
+                    _ => self.restarted(generation).await,
                 }
             }
         }
@@ -201,6 +159,25 @@ impl Chat {
             now
         } else {
             generation
+        }
+    }
+
+    async fn until_retry(&self, pause: Option<Duration>, generation: u64) {
+        let asked = self.retry.notified();
+        tokio::pin!(asked);
+        asked.as_mut().enable();
+        if self.retry_asked.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        let waited = async {
+            match pause {
+                Some(pause) => self.pause(pause, generation).await,
+                None => self.restarted(generation).await,
+            }
+        };
+        tokio::select! {
+            () = waited => {}
+            () = asked => {}
         }
     }
 

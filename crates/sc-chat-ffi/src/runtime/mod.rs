@@ -1,11 +1,14 @@
 mod bringup;
 mod clock;
+#[cfg(test)]
+mod doubles;
 mod expiry;
 mod feed;
 mod lifecycle;
 mod local;
 mod retry;
 mod session;
+mod wipe;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,7 +23,7 @@ use sc_chat::crypto::DeviceKeys;
 use sc_chat::media::MediaWorker;
 use sc_chat::{ChatConfig, ChatError, ChatPhase, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
 use tokio::runtime::Handle;
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::{Notify, Semaphore, watch};
 
 use crate::platform::{ChatKeys, ChatListener, ChatTransport, Keys, Wire};
 use crate::setup::ChatSetup;
@@ -54,6 +57,8 @@ pub struct Chat {
     config: RwLock<Option<ChatConfig>>,
     visible: AtomicBool,
     restarts: watch::Sender<u64>,
+    retry: Notify,
+    retry_asked: AtomicBool,
     lifecycle: tokio::sync::Mutex<()>,
     held: Mutex<HashMap<String, Held>>,
 }
@@ -88,6 +93,8 @@ impl Chat {
             config: RwLock::new(None),
             visible: AtomicBool::new(false),
             restarts: watch::Sender::new(0),
+            retry: Notify::new(),
+            retry_asked: AtomicBool::new(false),
             lifecycle: tokio::sync::Mutex::new(()),
             held: Mutex::new(HashMap::new()),
         }
@@ -148,7 +155,8 @@ impl Chat {
             self.status().phase,
             ChatPhase::KeychainDenied | ChatPhase::KeychainUnavailable
         ) {
-            self.restart();
+            self.retry_asked.store(true, Ordering::SeqCst);
+            self.retry.notify_waiters();
         }
     }
 

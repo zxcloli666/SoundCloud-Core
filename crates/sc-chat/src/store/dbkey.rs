@@ -23,10 +23,13 @@ pub fn load_or_create(keys: &dyn KeyStore) -> ChatResult<(Zeroizing<[u8; 32]>, b
 }
 
 pub fn remove_files(path: &Path) -> ChatResult<()> {
+    if !path.exists() {
+        return Ok(());
+    }
     for file in [
-        path.to_path_buf(),
         sibling(path, "-wal"),
         sibling(path, "-shm"),
+        path.to_path_buf(),
     ] {
         match std::fs::remove_file(&file) {
             Err(error) if error.kind() != ErrorKind::NotFound => return Err(ChatError::Store),

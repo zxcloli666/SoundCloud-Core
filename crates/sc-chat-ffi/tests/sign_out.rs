@@ -33,3 +33,32 @@ async fn a_sign_out_while_the_store_opens_sends_nothing_for_the_old_session() {
     assert_eq!(rig.client.status().device_id, None);
     assert_eq!(rig.client.status().phase, ChatPhase::SignedOut);
 }
+
+#[tokio::test]
+async fn signing_out_removes_the_orphans_next_to_the_store() {
+    let rig = Rig::new();
+    std::fs::create_dir_all(&rig.dir).unwrap();
+    for name in [
+        "chat.db.orphan-5",
+        "chat.db.orphan-5-wal",
+        "chat.db.orphan-6-shm",
+    ] {
+        std::fs::write(rig.dir.join(name), b"old metadata").unwrap();
+    }
+    rig.client.set_session(Some("session".into()));
+    until("the store opens", || rig.dir.join("chat.db").exists()).await;
+
+    rig.client.set_session(None);
+    until("the device keys are gone", || rig.keys.names().is_empty()).await;
+
+    until("the orphans are gone", || {
+        std::fs::read_dir(&rig.dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".orphan-")
+        })
+    })
+    .await;
+}

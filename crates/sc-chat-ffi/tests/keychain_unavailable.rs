@@ -1,8 +1,11 @@
 mod support;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use sc_chat::ChatPhase;
+use sc_chat::{ChatPhase, KeyName, Tier};
+use sc_chat_ffi::ChatKeys;
 use support::{Rig, until};
 
 async fn unavailable() -> Rig {
@@ -67,4 +70,42 @@ async fn retry_keychain_cuts_a_long_wait_down_to_the_floor() {
 
     until("the store opens", || rig.dir.join("chat.db").exists()).await;
     assert!(retried.elapsed() < Duration::from_millis(3_000));
+}
+
+#[tokio::test]
+async fn a_retry_during_a_try_is_ignored() {
+    let rig = unavailable().await;
+    let keys = Arc::downgrade(&rig.keys);
+    let client = Arc::downgrade(&rig.client);
+    let once = AtomicBool::new(false);
+    rig.keys.on_ask(move || {
+        if once.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if let Some(keys) = keys.upgrade() {
+            keys.break_down(false);
+        }
+        if let Some(client) = client.upgrade() {
+            client.retry_keychain();
+        }
+    });
+
+    until("the config call goes out", || rig.transport.requests() > 0).await;
+    tokio::time::sleep(Duration::from_millis(1_000)).await;
+
+    assert_eq!(rig.transport.tiers_seen(), [Tier::Direct, Tier::Relay]);
+}
+
+#[tokio::test]
+async fn a_failure_after_the_keychain_heals_shows_its_own_phase() {
+    let rig = unavailable().await;
+    rig.keys.break_down(false);
+    rig.keys.save(KeyName::Database, vec![1; 32]).unwrap();
+    std::fs::write(rig.dir.join("chat.db"), b"this is not sqlite at all").unwrap();
+
+    until("the starting phase", || {
+        rig.client.status().phase == ChatPhase::Starting
+    })
+    .await;
+    assert_eq!(rig.transport.requests(), 0);
 }

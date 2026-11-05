@@ -29,7 +29,7 @@ pub(crate) mod seal;
 
 use std::collections::HashSet;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicI64;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
@@ -47,7 +47,7 @@ use crate::contracts::{
 pub use crate::contracts::{UploadObject, UploadState};
 pub use expiry::ExpiryTimer;
 pub use media_rows::{MediaUpload, NewUpload, Reserved};
-pub use orphan::ORPHANS_KEPT;
+pub use orphan::{ORPHANS_KEPT, remove_orphans};
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";
@@ -128,19 +128,21 @@ pub struct Store {
     compacted_at: AtomicI64,
     uploads_watch: RwLock<Option<Arc<dyn Events>>>,
     committed: Mutex<HashSet<Uuid>>,
+    path: Option<PathBuf>,
 }
 
 impl Store {
     pub fn open(path: &Path, master: &[u8; 32]) -> ChatResult<Self> {
         dbkey::owner_only(path)?;
-        Self::with_connection(Connection::open(path)?, master)
+        Self::with_connection(Connection::open(path)?, master, Some(path))
     }
 
     pub fn open_in_memory(master: &[u8; 32]) -> ChatResult<Self> {
-        Self::with_connection(Connection::open_in_memory()?, master)
+        Self::with_connection(Connection::open_in_memory()?, master, None)
     }
 
     pub fn open_keyed(path: &Path, keys: &dyn KeyStore) -> ChatResult<Self> {
+        orphan::set_strays_aside(path)?;
         let (master, fresh) = dbkey::load_or_create(keys)?;
         if fresh {
             orphan::set_aside(path)?;
@@ -154,7 +156,11 @@ impl Store {
         }
     }
 
-    fn with_connection(conn: Connection, master: &[u8; 32]) -> ChatResult<Self> {
+    fn with_connection(
+        conn: Connection,
+        master: &[u8; 32],
+        path: Option<&Path>,
+    ) -> ChatResult<Self> {
         migrations::prepare(&conn)?;
         migrations::migrate(&conn)?;
         let keys = StoreKeys::derive(master)?;
@@ -165,6 +171,7 @@ impl Store {
             compacted_at: AtomicI64::new(Millis::MIN),
             uploads_watch: RwLock::new(None),
             committed: Mutex::new(HashSet::new()),
+            path: path.map(Path::to_path_buf),
         })
     }
 

@@ -7,7 +7,7 @@
 The `Chat mobile` workflow builds both packages on every push to `main` and on `sc-chat-ffi-v*` tags. Take them from the run of a tag:
 
 ```sh
-gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.2
+gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.3
 gh run download <run id> --repo zxcloli666/SoundCloud-Core
 ```
 
@@ -79,11 +79,11 @@ client.setSession(sessionId: sessionId)
 client.setVisible(visible: true)
 ```
 
-- `setSession(id)`: the music session id. Call it on start, after every login (even with the same id) and with `null` on sign out. Sign out removes this chat device and wipes its store and keys.
+- `setSession(id)`: the music session id. Call it on start, after every login (even with the same id) and with `null` on sign out. Sign out removes this chat device and wipes its store, its orphans and its keys.
 - `setVisible(true)` in the foreground, `false` in the background. Visible means long polls and fast delivery, hidden means one sync a minute.
 - `setFocus(conversationId)` while a thread is on screen, `setFocus(null)` when it closes.
 - `networkChanged()` after Wi-Fi, mobile data or VPN changes.
-- `retryKeychain()` when the user asks to try the keychain again; it does nothing outside `KEYCHAIN_DENIED` and `KEYCHAIN_UNAVAILABLE`.
+- `retryKeychain()` when the user asks to try the keychain again; it does nothing outside `KEYCHAIN_DENIED` and `KEYCHAIN_UNAVAILABLE`, and a call while a try runs is dropped.
 
 ### Status
 
@@ -189,8 +189,8 @@ Every async call throws `ChatException` in Kotlin and `ChatError` in Swift. The 
 
 ## Storage
 
-- The store is SQLite at `<dataDir>/chat.db` with `-wal` and `-shm`, mode 0600. Use app-private storage (Android `filesDir`, iOS Application Support) and keep it out of backups.
-- If the database key is gone or no longer opens `chat.db`, Core moves the old file aside to `chat.db.orphan-<unix s>` (with its `-wal` and `-shm`) and starts a fresh store; the newest 2 orphans stay. A store with no chats left (after a sign-out) is removed instead.
+- The store is SQLite at `<dataDir>/chat.db` with `-wal` and `-shm`, mode 0600. Use app-private storage (Android `filesDir`, iOS Application Support). Exclude the whole `dataDir` from OS backups, not single files, since Core adds files next to `chat.db`: Android leaves the folder out in `dataExtractionRules` and `fullBackupContent`, iOS sets `isExcludedFromBackup` on the folder.
+- If the database key is gone or no longer opens `chat.db`, Core moves the old file aside to `chat.db.orphan-<unix s>` (with its `-wal` and `-shm`) and starts a fresh store; the newest 2 orphans stay. A store with no chats left is removed instead. Sign out, log out and a revoke delete every orphan.
 - Message bodies, previews, titles, drafts, people and conversation keys are sealed with XChaCha20-Poly1305 under subkeys of `KeyName.DATABASE`; the search index uses keyed tokens. Ids, seqs and timestamps are plain.
 - `ChatKeys` holds four secrets: `DATABASE` (32 random bytes, the store key), `DEVICE_ID` (16 bytes), `DEVICE_AUTH` (Ed25519 seed) and `DEVICE_BOX` (X25519 secret). Android: encrypt them with an Android Keystore key. iOS: Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. They must never leave the device.
 - `ChatKeys` throws `KeyFailure.Denied` when the user refuses access (Android biometric cancel, iOS user cancel) and `KeyFailure.Unavailable` for anything else. A denial never drops the store or the device keys.

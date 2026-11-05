@@ -33,8 +33,21 @@ impl<L: Local> SyncEngine<L> {
         conversation_id: ConvId,
         from_epoch: u32,
     ) -> ChatResult<Vec<u32>> {
+        let mut opened = Vec::new();
+        let fetched = self
+            .key_pages(conversation_id, from_epoch, &mut opened)
+            .await;
+        let installed = self.install_keys(conversation_id, &opened)?;
+        fetched.map(|()| installed)
+    }
+
+    async fn key_pages(
+        &self,
+        conversation_id: ConvId,
+        from_epoch: u32,
+        opened: &mut Vec<(u32, Ck)>,
+    ) -> ChatResult<()> {
         let mut from = from_epoch;
-        let mut installed = BTreeSet::new();
         for _ in 0..KEYS_PAGES_MAX {
             let page = self.api.keys(conversation_id, Some(from)).await?;
             for key in &page {
@@ -42,8 +55,7 @@ impl<L: Local> SyncEngine<L> {
                     continue;
                 };
                 if let Ok(ck) = self.cipher.open_ck(conversation_id, epoch, &key.sealed) {
-                    self.store.put_ck(conversation_id, epoch, &ck)?;
-                    installed.insert(epoch);
+                    opened.push((epoch, ck));
                 }
             }
             let newest = page
@@ -54,6 +66,15 @@ impl<L: Local> SyncEngine<L> {
                 Some(newest) if page.len() >= KEYS_PAGE_MAX && newest >= from => from = newest + 1,
                 _ => break,
             }
+        }
+        Ok(())
+    }
+
+    fn install_keys(&self, conversation_id: ConvId, opened: &[(u32, Ck)]) -> ChatResult<Vec<u32>> {
+        let mut installed = BTreeSet::new();
+        for (epoch, ck) in opened {
+            self.store.put_ck(conversation_id, *epoch, ck)?;
+            installed.insert(*epoch);
         }
         if let Some(newest) = installed.last() {
             let now = self.now();

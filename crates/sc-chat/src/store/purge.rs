@@ -121,7 +121,11 @@ impl Store {
         tx.commit()?;
         conn.execute("INSERT INTO search (search) VALUES ('optimize')", [])?;
         conn.execute_batch("VACUUM")?;
-        checkpoint(&conn)
+        checkpoint(&conn)?;
+        match &self.path {
+            Some(path) => super::orphan::remove_orphans(path),
+            None => Ok(()),
+        }
     }
 }
 
