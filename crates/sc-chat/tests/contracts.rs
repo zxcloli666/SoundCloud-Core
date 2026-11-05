@@ -97,6 +97,18 @@ fn server_errors_map_to_codes() {
 }
 
 #[test]
+fn the_device_cap_is_not_the_daily_sign_in_limit() {
+    let cap = ChatError::from_server(&json!({"error": "chat_device_cap"}));
+    assert_eq!(cap, ChatError::DeviceCap);
+    assert_eq!(cap.retry_ms(), None);
+    assert_eq!(to_json(&cap), json!({"code": "device_cap"}));
+    assert_eq!(
+        ChatError::from_server(&json!({"error": "chat_request_limit"})),
+        ChatError::RequestLimit
+    );
+}
+
+#[test]
 fn errors_reach_the_webview_tagged_by_code() {
     assert_eq!(
         to_json(&ChatError::SlowMode { retry_ms: 5 }),

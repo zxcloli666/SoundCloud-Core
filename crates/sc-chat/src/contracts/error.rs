@@ -26,6 +26,8 @@ pub enum ChatError {
     Unavailable,
     #[error("too many message requests")]
     RequestLimit,
+    #[error("the account is signed in on its maximum number of devices")]
+    DeviceCap,
     #[error("sending is limited")]
     SendLimited,
     #[error("reading is limited")]
@@ -101,6 +103,7 @@ impl ChatError {
             },
             "unavailable" => Self::Unavailable,
             "request_limit" => Self::RequestLimit,
+            "device_cap" => Self::DeviceCap,
             "send_limited" => Self::SendLimited,
             "read_limited" => Self::ReadLimited,
             "busy" => Self::Busy {

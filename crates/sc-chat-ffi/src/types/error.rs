@@ -13,6 +13,7 @@ pub enum ChatError {
     },
     Unavailable,
     RequestLimit,
+    DeviceCap,
     SendLimited,
     ReadLimited,
     Busy {
