@@ -45,6 +45,7 @@ impl Chat {
         if !self.adopt_config(view).enabled {
             return Err(Halt::Phase(ChatPhase::Off));
         }
+        self.current(seen)?;
         let device = self.api.register_device(&self.device).await;
         self.current(seen)?;
         let device = device.map_err(|error| self.fail(&error, failures))?;

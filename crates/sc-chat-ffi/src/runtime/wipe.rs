@@ -1,6 +1,6 @@
 use sc_chat::api::{Api, Identity};
 use sc_chat::crypto::DeviceKeys;
-use sc_chat::store::remove_orphans;
+use sc_chat::store::{remove_database, remove_orphans};
 use sc_chat::{ChatError, ChatResult, HistoryGate, KeyName, KeyStore};
 
 use super::Chat;
@@ -35,15 +35,20 @@ impl Chat {
         let wiped = self
             .handle
             .spawn_blocking(move || {
+                let store = match core {
+                    Some(core) => core.store.wipe(),
+                    None if forget_device => remove_database(&database),
+                    None => Ok(()),
+                };
                 let orphans = remove_orphans(&database);
-                if let Some(core) = core {
-                    core.store.wipe()?;
-                }
-                if forget_device {
-                    DeviceKeys::erase(keys.as_ref())?;
-                    keys.delete(KeyName::Database)?;
-                }
-                orphans
+                let secrets = if forget_device {
+                    let device = DeviceKeys::erase(keys.as_ref());
+                    let database_key = keys.delete(KeyName::Database);
+                    device.and(database_key)
+                } else {
+                    Ok(())
+                };
+                store.and(orphans).and(secrets)
             })
             .await
             .unwrap_or(Err(ChatError::Internal));

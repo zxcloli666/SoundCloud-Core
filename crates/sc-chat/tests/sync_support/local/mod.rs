@@ -2,7 +2,7 @@ mod outbox;
 mod render;
 mod store;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Mutex;
 
 use sc_chat::outbox::OutboxItem;
@@ -17,6 +17,7 @@ struct Data {
     marks: HashMap<ConvId, Vec<PeerMark>>,
     users: HashMap<UserId, UserRef>,
     keys: HashMap<(ConvId, u32), [u8; 32]>,
+    refused_keys: HashSet<(ConvId, u32)>,
     outbox: Vec<(OutboxItem, bool)>,
     kept_above: Vec<(ConvId, Seq)>,
     group_meta: HashMap<ConvId, ConversationMeta>,
@@ -54,6 +55,10 @@ impl MemoryLocal {
 
     pub fn add_key(&self, id: ConvId, epoch: u32, bytes: [u8; 32]) {
         self.data.lock().unwrap().keys.insert((id, epoch), bytes);
+    }
+
+    pub fn refuse_key(&self, id: ConvId, epoch: u32) {
+        self.data.lock().unwrap().refused_keys.insert((id, epoch));
     }
 
     pub fn queue(&self, item: OutboxItem) {

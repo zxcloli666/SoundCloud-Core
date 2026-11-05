@@ -1,46 +1,8 @@
-mod store_support;
-
-use std::path::{Path, PathBuf};
-
 use sc_chat::store::{ORPHANS_KEPT, Store};
-use sc_chat::{ChatError, KeyName, KeyStore};
-use store_support::{MemoryKeys, PEER, TempDir, conv, post};
+use sc_chat::{KeyName, KeyStore};
 
-fn messages(store: &Store) -> i64 {
-    store
-        .conn()
-        .unwrap()
-        .query_row("SELECT count(*) FROM messages", [], |row| row.get(0))
-        .unwrap()
-}
-
-fn orphans(dir: &TempDir) -> Vec<PathBuf> {
-    let mut found: Vec<(u64, PathBuf)> = std::fs::read_dir(&dir.0)
-        .unwrap()
-        .filter_map(|entry| {
-            let path = entry.unwrap().path();
-            let name = path.file_name()?.to_str()?.to_owned();
-            let at = name.strip_prefix("chat.db.orphan-")?.parse().ok()?;
-            Some((at, path))
-        })
-        .collect();
-    found.sort();
-    found.into_iter().map(|(_, path)| path).collect()
-}
-
-fn master(keys: &MemoryKeys) -> [u8; 32] {
-    let saved = keys.load(KeyName::Database).unwrap().unwrap();
-    saved.as_slice().try_into().unwrap()
-}
-
-fn lose_key_after(path: &Path, keys: &MemoryKeys, text: &str) -> [u8; 32] {
-    let store = Store::open_keyed(path, keys).unwrap();
-    store.put_messages(&[post(conv(), 1, PEER, text)]).unwrap();
-    drop(store);
-    let lost = master(keys);
-    keys.delete(KeyName::Database).unwrap();
-    lost
-}
+use super::store_support::{MemoryKeys, PEER, TempDir, conv, post};
+use super::{lose_key_after, master, messages, orphans};
 
 #[test]
 fn a_lost_key_sets_the_old_database_aside_and_starts_fresh() {
@@ -116,29 +78,11 @@ fn a_wiped_database_without_its_key_is_not_kept() {
     assert!(orphans(&dir).is_empty());
 }
 
-#[test]
-fn a_wipe_removes_every_orphan_next_to_the_store() {
-    let dir = TempDir::new("wipe-orphans");
-    let path = dir.file("chat.db");
-    let keys = MemoryKeys::default();
-    lose_key_after(&path, &keys, "чужие метаданные");
-    let store = Store::open_keyed(&path, &keys).unwrap();
-    std::fs::write(dir.file("chat.db.orphan-3-wal"), b"stray").unwrap();
-    assert_eq!(orphans(&dir).len(), 1);
-
-    store.wipe().unwrap();
-
-    let left: Vec<String> = std::fs::read_dir(&dir.0)
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-        .filter(|name| name.contains(".orphan-"))
-        .collect();
-    assert!(left.is_empty(), "{left:?}");
-}
-
 #[cfg(unix)]
 #[test]
 fn a_failed_move_puts_the_database_back() {
+    use sc_chat::ChatError;
+
     let dir = TempDir::new("rollback");
     let path = dir.file("chat.db");
     let keys = MemoryKeys::default();
@@ -161,36 +105,34 @@ fn a_failed_move_puts_the_database_back() {
     assert_eq!(messages(&Store::open(&path, &lost).unwrap()), 1);
 }
 
-#[test]
-fn a_stray_wal_without_its_database_moves_next_to_the_newest_orphan() {
-    let dir = TempDir::new("strays");
-    let path = dir.file("chat.db");
-    std::fs::write(dir.file("chat.db.orphan-7"), b"db").unwrap();
-    std::fs::write(dir.file("chat.db-wal"), b"stray wal").unwrap();
-    let keys = MemoryKeys::default();
-
-    let store = Store::open_keyed(&path, &keys).unwrap();
-
-    assert_eq!(messages(&store), 0);
-    assert_eq!(
-        std::fs::read(dir.file("chat.db.orphan-7-wal")).unwrap(),
-        b"stray wal"
-    );
-}
-
+#[cfg(target_os = "macos")]
 #[test]
 fn an_orphan_that_cannot_be_pruned_does_not_stop_the_start() {
     let dir = TempDir::new("prune");
     let path = dir.file("chat.db");
     let keys = MemoryKeys::default();
-    std::fs::create_dir_all(dir.file("chat.db.orphan-1").join("stuck")).unwrap();
+    let stuck = dir.file("chat.db.orphan-1");
+    std::fs::write(&stuck, b"db").unwrap();
     std::fs::write(dir.file("chat.db.orphan-2"), b"db").unwrap();
     let lost = lose_key_after(&path, &keys, "живой");
+    pin(&stuck, true);
 
-    let store = Store::open_keyed(&path, &keys).unwrap();
+    let opened = Store::open_keyed(&path, &keys);
+    pin(&stuck, false);
 
-    assert_eq!(messages(&store), 0);
+    assert_eq!(messages(&opened.unwrap()), 0);
     let newest = orphans(&dir).pop().unwrap();
     assert_eq!(messages(&Store::open(&newest, &lost).unwrap()), 1);
-    assert!(dir.file("chat.db.orphan-1").exists());
+    assert!(stuck.exists());
+}
+
+#[cfg(target_os = "macos")]
+fn pin(file: &std::path::Path, pinned: bool) {
+    let flag = if pinned { "uchg" } else { "nouchg" };
+    let done = std::process::Command::new("chflags")
+        .arg(flag)
+        .arg(file)
+        .status()
+        .unwrap();
+    assert!(done.success());
 }

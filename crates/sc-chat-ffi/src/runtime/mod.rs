@@ -71,11 +71,21 @@ impl Chat {
         transport: Arc<dyn ChatTransport>,
         listener: Arc<dyn ChatListener>,
     ) -> Self {
-        let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        let channel = Arc::new(Channel::new(clock.clone()));
+        let channel = Arc::new(Channel::new(Arc::new(SystemClock)));
+        let api = Api::new(channel, Arc::new(Wire(transport)));
+        Self::with_api(handle, setup, keys, api, listener)
+    }
+
+    fn with_api(
+        handle: Handle,
+        setup: ChatSetup,
+        keys: Arc<dyn ChatKeys>,
+        api: Api,
+        listener: Arc<dyn ChatListener>,
+    ) -> Self {
         Self {
             handle,
-            api: Arc::new(Api::new(channel, Arc::new(Wire(transport)))),
+            api: Arc::new(api),
             keys: Arc::new(Keys(keys)),
             media: MediaWorker::default(),
             preparing: Arc::new(Semaphore::new(PREPARE_SLOTS)),
@@ -86,7 +96,7 @@ impl Chat {
                 app_version: setup.app_version,
                 caps: Vec::new(),
             },
-            clock,
+            clock: Arc::new(SystemClock),
             feed: Arc::new(Feed::new(listener)),
             session: Session::default(),
             core: RwLock::new(None),

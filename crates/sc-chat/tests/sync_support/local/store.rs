@@ -3,9 +3,9 @@ use sc_chat::outbox::OutboxItem;
 use sc_chat::store::{StoredContent, StoredMessage, SyncState};
 use sc_chat::sync::Local;
 use sc_chat::{
-    ChatResult, ClientId, ConvId, ConversationKind, ConversationMeta, ConversationSummary,
-    GoneMessage, HistoryPage, HistoryQuery, MemberState, Message, Millis, PeerMark, Seq, UserId,
-    UserRef,
+    ChatError, ChatResult, ClientId, ConvId, ConversationKind, ConversationMeta,
+    ConversationSummary, GoneMessage, HistoryPage, HistoryQuery, MemberState, Message, Millis,
+    PeerMark, Seq, UserId, UserRef,
 };
 
 use super::MemoryLocal;
@@ -144,6 +144,15 @@ impl Local for MemoryLocal {
     }
 
     fn put_ck(&self, id: ConvId, epoch: u32, ck: &Ck) -> ChatResult<()> {
+        if self
+            .data
+            .lock()
+            .unwrap()
+            .refused_keys
+            .contains(&(id, epoch))
+        {
+            return Err(ChatError::Store);
+        }
         self.add_key(id, epoch, *ck.as_bytes());
         Ok(())
     }

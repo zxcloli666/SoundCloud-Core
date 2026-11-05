@@ -22,23 +22,6 @@ pub fn load_or_create(keys: &dyn KeyStore) -> ChatResult<(Zeroizing<[u8; 32]>, b
     Ok((master, true))
 }
 
-pub fn remove_files(path: &Path) -> ChatResult<()> {
-    if !path.exists() {
-        return Ok(());
-    }
-    for file in [
-        sibling(path, "-wal"),
-        sibling(path, "-shm"),
-        path.to_path_buf(),
-    ] {
-        match std::fs::remove_file(&file) {
-            Err(error) if error.kind() != ErrorKind::NotFound => return Err(ChatError::Store),
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
 #[cfg(unix)]
 pub fn owner_only(path: &Path) -> ChatResult<()> {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};

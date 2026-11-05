@@ -72,9 +72,14 @@ impl<L: Local> SyncEngine<L> {
 
     fn install_keys(&self, conversation_id: ConvId, opened: &[(u32, Ck)]) -> ChatResult<Vec<u32>> {
         let mut installed = BTreeSet::new();
+        let mut done = Ok(());
         for (epoch, ck) in opened {
-            self.store.put_ck(conversation_id, *epoch, ck)?;
-            installed.insert(*epoch);
+            match self.store.put_ck(conversation_id, *epoch, ck) {
+                Ok(()) => {
+                    installed.insert(*epoch);
+                }
+                Err(error) => done = done.and(Err(error)),
+            }
         }
         if let Some(newest) = installed.last() {
             let now = self.now();
@@ -91,9 +96,10 @@ impl<L: Local> SyncEngine<L> {
             });
         }
         for epoch in &installed {
-            self.reopen(conversation_id, *epoch)?;
+            let reopened = self.reopen(conversation_id, *epoch);
+            done = done.and(reopened);
         }
-        Ok(installed.into_iter().collect())
+        done.map(|()| installed.into_iter().collect())
     }
 
     pub async fn refresh_keys(&self, conversation_id: ConvId) -> ChatResult<Vec<u32>> {

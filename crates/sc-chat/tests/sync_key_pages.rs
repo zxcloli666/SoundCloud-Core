@@ -80,3 +80,17 @@ async fn a_key_fetch_cut_between_pages_installs_nothing_and_the_next_fetch_opens
     assert_eq!(rig.engine.refresh_keys(A).await, Ok(vec![0]));
     assert!(all_open(&rig));
 }
+
+#[tokio::test]
+async fn a_key_the_store_refuses_does_not_stop_the_others_from_opening_messages() {
+    let rig = a_sealed_post().await;
+    rig.server.json("GET", &keys_path(), keys(A, &[0, 1, 2]));
+    rig.local.refuse_key(A, 1);
+
+    assert_eq!(rig.engine.refresh_keys(A).await, Err(ChatError::Store));
+
+    assert!(rig.local.has_key(A, 0));
+    assert!(!rig.local.has_key(A, 1));
+    assert!(rig.local.has_key(A, 2));
+    assert!(all_open(&rig));
+}

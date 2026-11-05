@@ -122,10 +122,10 @@ impl Store {
         conn.execute("INSERT INTO search (search) VALUES ('optimize')", [])?;
         conn.execute_batch("VACUUM")?;
         checkpoint(&conn)?;
-        match &self.path {
-            Some(path) => super::orphan::remove_orphans(path),
-            None => Ok(()),
+        if let Some(path) = &self.path {
+            let _ = super::orphan::remove_orphans(path);
         }
+        Ok(())
     }
 }
 
