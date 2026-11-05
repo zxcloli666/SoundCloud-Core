@@ -27,7 +27,7 @@ impl Chat {
         loop {
             let generation = self.generation();
             let seen = self.session.seen();
-            let halt = match self.bring_up(generation, &seen, &mut failures).await {
+            let halt = match self.bring_up(&seen, &mut failures).await {
                 Ok(core) => {
                     failures = 0;
                     self.drive(core, generation).await
@@ -78,6 +78,7 @@ impl Chat {
         self.forget_user();
         let core = self.core.write().ok().and_then(|mut core| core.take());
         self.api.set_identity(None);
+        self.session.wiped();
         self.restart();
         let keys = self.keys.clone();
         let wiped = self

@@ -13,7 +13,6 @@ use super::{Chat, Core, Halt};
 impl Chat {
     pub(super) async fn bring_up(
         self: &Arc<Self>,
-        generation: u64,
         seen: &Seen,
         failures: &mut u32,
     ) -> Result<Arc<Core>, Halt> {
@@ -29,31 +28,30 @@ impl Chat {
             }
         });
         let core = self.local_core().await;
-        self.current(generation, seen)?;
+        self.current(seen)?;
         let core = core.map_err(|error| self.fail(&error, failures))?;
         let identity = Identity {
             session_id,
             device_id: core.device_id,
             keys: core.keys.clone(),
         };
-        self.adopt_identity(identity, generation, seen).await?;
+        self.adopt_identity(identity, seen).await?;
         self.feed
             .update(|status| status.phase = ChatPhase::Starting);
         let view = self.api.config().await;
-        self.current(generation, seen)?;
+        self.current(seen)?;
         let view = view.map_err(|error| self.fail(&error, failures))?;
         let user_id = view.user_id.clone();
         if !self.adopt_config(view).enabled {
             return Err(Halt::Phase(ChatPhase::Off));
         }
         let device = self.api.register_device(&self.device).await;
-        self.current(generation, seen)?;
+        self.current(seen)?;
         let device = device.map_err(|error| self.fail(&error, failures))?;
         self.feed
             .update(|status| status.device_id = Some(device.id));
         if let Some(user_id) = user_id {
-            self.adopt_user(&core, user_id, generation, seen, failures)
-                .await?;
+            self.adopt_user(&core, user_id, seen, failures).await?;
         }
         self.feed.update(|status| {
             status.phase = ChatPhase::Ready;
@@ -86,14 +84,9 @@ impl Chat {
         Ok(core)
     }
 
-    async fn adopt_identity(
-        &self,
-        identity: Identity,
-        generation: u64,
-        seen: &Seen,
-    ) -> Result<(), Halt> {
+    async fn adopt_identity(&self, identity: Identity, seen: &Seen) -> Result<(), Halt> {
         let _lifecycle = self.lifecycle.lock().await;
-        self.current(generation, seen)?;
+        self.current(seen)?;
         self.api.set_identity(Some(identity));
         Ok(())
     }
@@ -102,7 +95,6 @@ impl Chat {
         &self,
         core: &Arc<Core>,
         user_id: UserId,
-        generation: u64,
         seen: &Seen,
         failures: &mut u32,
     ) -> Result<(), Halt> {
@@ -119,7 +111,7 @@ impl Chat {
             })
             .await
             .unwrap_or(Err(ChatError::Internal));
-        self.current(generation, seen)?;
+        self.current(seen)?;
         let other_account = other_account.map_err(|error| self.fail(&error, failures))?;
         if other_account {
             let _ = self.wipe(false).await;
@@ -142,8 +134,8 @@ impl Chat {
         config
     }
 
-    fn current(&self, generation: u64, seen: &Seen) -> Result<(), Halt> {
-        if self.generation() == generation && self.session.seen() == *seen {
+    fn current(&self, seen: &Seen) -> Result<(), Halt> {
+        if self.session.seen() == *seen {
             Ok(())
         } else {
             Err(Halt::Restart)
@@ -180,3 +172,7 @@ fn config_of(view: ConfigView) -> ChatConfig {
         media: MediaConfig::from(&view.media),
     }
 }
+
+#[cfg(test)]
+#[path = "bringup_tests.rs"]
+mod tests;

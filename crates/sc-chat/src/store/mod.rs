@@ -20,6 +20,7 @@ mod media_watch;
 pub(crate) mod messages;
 pub(crate) mod meta;
 pub mod migrations;
+mod orphan;
 mod people;
 mod pins;
 pub(crate) mod project;
@@ -46,6 +47,7 @@ use crate::contracts::{
 pub use crate::contracts::{UploadObject, UploadState};
 pub use expiry::ExpiryTimer;
 pub use media_rows::{MediaUpload, NewUpload, Reserved};
+pub use orphan::ORPHANS_KEPT;
 pub use purge::COMPACTION_GAP_MS;
 
 const BODY_LABEL: &[u8] = b"chat-store body";
@@ -141,11 +143,11 @@ impl Store {
     pub fn open_keyed(path: &Path, keys: &dyn KeyStore) -> ChatResult<Self> {
         let (master, fresh) = dbkey::load_or_create(keys)?;
         if fresh {
-            dbkey::remove_files(path)?;
+            orphan::set_aside(path)?;
         }
         match Self::open(path, &master) {
             Err(ChatError::Crypto) => {
-                dbkey::remove_files(path)?;
+                orphan::set_aside(path)?;
                 Self::open(path, &master)
             }
             opened => opened,

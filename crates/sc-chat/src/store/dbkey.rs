@@ -63,7 +63,7 @@ pub fn owner_only(_path: &Path) -> ChatResult<()> {
     Ok(())
 }
 
-fn sibling(path: &Path, suffix: &str) -> PathBuf {
+pub(super) fn sibling(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.as_os_str().to_os_string();
     name.push(suffix);
     PathBuf::from(name)

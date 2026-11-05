@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use sc_chat::ChatPhase;
 
@@ -16,12 +16,14 @@ pub enum AuthMove {
 pub struct Seen {
     pub session_id: Option<String>,
     pub logged_out: bool,
+    pub wipes: u64,
 }
 
 #[derive(Default)]
 pub struct Session {
     current: Mutex<Option<String>>,
     logged_out: AtomicBool,
+    wipes: AtomicU64,
 }
 
 impl Session {
@@ -41,6 +43,10 @@ impl Session {
         self.logged_out.store(false, Ordering::Release);
     }
 
+    pub fn wiped(&self) {
+        self.wipes.fetch_add(1, Ordering::AcqRel);
+    }
+
     pub fn logged_out(&self) -> bool {
         self.logged_out.load(Ordering::Acquire)
     }
@@ -49,6 +55,7 @@ impl Session {
         Seen {
             session_id: self.current(),
             logged_out: self.logged_out(),
+            wipes: self.wipes.load(Ordering::Acquire),
         }
     }
 }
@@ -76,6 +83,17 @@ pub fn auth_move(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_wipe_between_a_log_out_and_the_same_login_still_changes_the_snapshot() {
+        let session = Session::default();
+        session.replace(Some("session".into()));
+        let before = session.seen();
+        session.log_out();
+        session.wiped();
+        session.log_in();
+        assert!(session.seen() != before);
+    }
 
     #[test]
     fn signing_out_drops_the_device() {
