@@ -2,7 +2,8 @@ use sc_chat::api::wire::NewConversation;
 use sc_chat::envelope::Content;
 use sc_chat::{
     ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta, ConversationPage,
-    ConversationSummary, CreateConversation, HistoryPage, HistoryQuery, ListQuery, ThreadSnapshot,
+    ConversationSummary, CreateConversation, HistoryPage, HistoryQuery, ListQuery, Seq,
+    ThreadSnapshot,
 };
 
 use crate::runtime::{Chat, Core};
@@ -46,6 +47,17 @@ impl Chat {
             Ok(page) => Ok(page),
             Err(_) => Ok(local),
         }
+    }
+
+    pub async fn images_before(
+        &self,
+        conversation_id: ConvId,
+        before: Option<Seq>,
+        limit: u32,
+    ) -> ChatResult<HistoryPage> {
+        let limit = limit.clamp(1, HISTORY_MAX);
+        self.blocking(move |core| core.store.images_before(conversation_id, before, limit))
+            .await
     }
 
     pub async fn create(&self, input: CreateConversation) -> ChatResult<ConversationSummary> {

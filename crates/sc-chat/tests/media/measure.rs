@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use sc_chat::media::{MediaWorker, open_image, open_thumb, prepare_image};
 
+use crate::icc::{p3_profile, with_icc_jpeg};
 use crate::support::*;
 
 #[test]

@@ -18,7 +18,7 @@ use sc_chat::api::wire::RegisterDevice;
 use sc_chat::channel::Channel;
 use sc_chat::crypto::DeviceKeys;
 use sc_chat::media::MediaWorker;
-use sc_chat::{ChatConfig, ChatError, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
+use sc_chat::{ChatConfig, ChatError, ChatPhase, ChatResult, ChatStatus, Clock, ConvId, DeviceId};
 use tokio::runtime::Handle;
 use tokio::sync::{Semaphore, watch};
 
@@ -140,6 +140,12 @@ impl Chat {
     pub fn kick(&self) {
         if let Some(core) = self.core() {
             core.sync.kick();
+        }
+    }
+
+    pub fn retry_keychain(&self) {
+        if self.status().phase == ChatPhase::KeychainDenied {
+            self.restart();
         }
     }
 

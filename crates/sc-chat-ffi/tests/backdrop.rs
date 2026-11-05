@@ -31,7 +31,7 @@ async fn a_room_backdrop_resolves_and_opens_from_its_ciphertext() {
     rig.with_store().await;
     let ciphertext = seeded(&rig.side_store());
 
-    let info = settle(rig.client.room_backdrop(ROOM))
+    let info = settle(rig.client.media_info(ROOM, MEDIA))
         .await
         .unwrap()
         .unwrap();
@@ -40,10 +40,6 @@ async fn a_room_backdrop_resolves_and_opens_from_its_ciphertext() {
         (MEDIA, 1920, 1080, ciphertext.len() as u64, None)
     );
     assert!(!info.thumbhash.is_empty());
-    assert_eq!(
-        settle(rig.client.media_info(ROOM, MEDIA)).await.unwrap(),
-        Some(info)
-    );
 
     let opened = settle(rig.client.open_image(ROOM, MEDIA, ciphertext.clone()))
         .await
@@ -106,27 +102,22 @@ async fn a_backdrop_change_goes_to_the_room_settings_before_any_meta_is_queued()
     assert_eq!(row.kind, MediaKind::Backdrop);
     committed(&store, row.id, 0x62, None);
 
-    let refused = settle(rig.client.set_room_backdrop(
-        "ROOM42".into(),
-        ROOM,
-        BackdropChange::Set { upload_id: row.id },
-    ))
-    .await;
-    assert_eq!(refused.err(), Some(SETTINGS_REFUSED));
-    let preset = settle(
+    let refused = settle(
         rig.client
-            .set_room_preset("ROOM42".into(), ROOM, "aurora".into()),
+            .set_room_backdrop(ROOM, BackdropChange::Set { upload_id: row.id }),
     )
     .await;
+    assert_eq!(refused.err(), Some(SETTINGS_REFUSED));
+    let preset = settle(rig.client.set_room_preset(ROOM, "aurora".into())).await;
     assert_eq!(preset.err(), Some(SETTINGS_REFUSED));
     let thread = settle(rig.client.open_thread(ROOM)).await.unwrap();
     assert!(thread.messages.is_empty());
     assert_eq!(
-        settle(rig.client.room_backdrop(ROOM))
-            .await
+        store
+            .room_backdrop(ROOM)
             .unwrap()
-            .map(|info| info.media_id),
-        Some(MEDIA)
+            .map(|image| image.media_id),
+        Some(MEDIA.to_string())
     );
 }
 
@@ -138,17 +129,21 @@ async fn a_backdrop_or_preset_aimed_at_a_group_is_refused_before_the_network() {
     rig.side_store()
         .put_conversations(&[summary(group, ConversationKind::Group)])
         .unwrap();
-    let preset = settle(
-        rig.client
-            .set_room_preset("ROOM42".into(), group, "aurora".into()),
-    )
-    .await;
+    let preset = settle(rig.client.set_room_preset(group, "aurora".into())).await;
     assert_eq!(preset.err(), Some(ChatError::Invalid));
-    let clear = settle(
-        rig.client
-            .set_room_backdrop("ROOM42".into(), group, BackdropChange::Clear),
-    )
-    .await;
+    let clear = settle(rig.client.set_room_backdrop(group, BackdropChange::Clear)).await;
     assert_eq!(clear.err(), Some(ChatError::Invalid));
-    assert_eq!(settle(rig.client.room_backdrop(group)).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_room_without_a_known_code_is_not_found_before_the_network() {
+    let rig = Rig::new();
+    rig.with_store().await;
+    rig.side_store()
+        .put_conversations(&[summary(ROOM, ConversationKind::Room)])
+        .unwrap();
+    let preset = settle(rig.client.set_room_preset(ROOM, "aurora".into())).await;
+    assert_eq!(preset.err(), Some(ChatError::NotFound));
+    let clear = settle(rig.client.set_room_backdrop(ROOM, BackdropChange::Clear)).await;
+    assert_eq!(clear.err(), Some(ChatError::NotFound));
 }

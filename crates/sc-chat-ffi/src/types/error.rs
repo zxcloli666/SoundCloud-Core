@@ -43,12 +43,12 @@ pub enum ChatError {
     },
     Invalid,
     NotFound,
-    Unimplemented,
     Internal,
     Offline,
     NotReady,
     Store,
     Keychain,
+    KeychainDenied,
     Crypto,
     #[uniffi(name = "ProtocolError")]
     Protocol,

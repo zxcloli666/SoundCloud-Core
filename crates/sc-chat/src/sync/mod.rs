@@ -9,6 +9,7 @@ mod jitter;
 mod keys;
 pub mod local;
 mod marks;
+mod meta_read;
 mod outbox;
 mod reconcile;
 mod room_meta;

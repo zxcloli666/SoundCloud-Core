@@ -197,37 +197,21 @@ impl ChatClient {
             .await
     }
 
-    pub async fn room_backdrop(
-        &self,
-        conversation_id: ConvId,
-    ) -> Result<Option<MediaInfo>, ChatError> {
-        self.run(|chat| async move { chat.room_backdrop(conversation_id).await })
-            .await
-    }
-
     pub async fn set_room_backdrop(
         &self,
-        room_code: String,
         conversation_id: ConvId,
         change: BackdropChange,
     ) -> Result<Message, ChatError> {
-        self.run(|chat| async move {
-            chat.set_room_backdrop(room_code, conversation_id, change)
-                .await
-        })
-        .await
+        self.run(|chat| async move { chat.set_room_backdrop(conversation_id, change).await })
+            .await
     }
 
     pub async fn set_room_preset(
         &self,
-        room_code: String,
         conversation_id: ConvId,
         preset_id: String,
     ) -> Result<Option<Message>, ChatError> {
-        self.run(|chat| async move {
-            chat.set_room_preset(room_code, conversation_id, preset_id)
-                .await
-        })
-        .await
+        self.run(|chat| async move { chat.set_room_preset(conversation_id, preset_id).await })
+            .await
     }
 }

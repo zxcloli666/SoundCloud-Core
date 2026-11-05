@@ -3,8 +3,8 @@ mod store_support;
 mod sync_support;
 
 use room_support::{
-    R, X, Y, backdrop, conversation_gets, conversation_path, joined, live, meta_message, resolves,
-    room_meta, room_view, shown_backdrop,
+    R, X, Y, backdrop, carried_backdrop, conversation_gets, conversation_path, joined, live,
+    meta_message, resolves, room_meta, room_view,
 };
 use sc_chat::sync::ROOM_META_RETRY_MS;
 use sc_chat::sync::SyncOutcome;
@@ -43,7 +43,7 @@ async fn a_dropped_meta_fetch_backs_off_and_then_heals() {
     live(&rig, 4, 7, vec![post(R, 7, 1, "back online")]).await;
     assert_eq!(conversation_gets(&rig), 2);
     assert_eq!(resolves(&rig, X), Some(backdrop(X)));
-    assert_eq!(shown_backdrop(&rig), Some(Uuid::from_u128(X)));
+    assert_eq!(carried_backdrop(&rig), Some(Uuid::from_u128(X)));
 
     rig.clock.advance(ROOM_META_RETRY_MS as u64);
     live(&rig, 5, 8, vec![post(R, 8, 1, "again")]).await;
@@ -116,7 +116,7 @@ async fn a_meta_caught_up_after_a_reset_is_fetched_once() {
     assert_eq!(conversation_gets(&rig), 1);
     assert_eq!(resolves(&rig, X), Some(backdrop(X)));
     assert_eq!(resolves(&rig, Y), None);
-    assert_eq!(shown_backdrop(&rig), Some(Uuid::from_u128(X)));
+    assert_eq!(carried_backdrop(&rig), Some(Uuid::from_u128(X)));
 }
 
 #[tokio::test]
@@ -129,5 +129,5 @@ async fn a_room_without_any_meta_drops_a_stale_backdrop() {
     joined(&rig, room_view(None, 1)).await;
     assert_eq!(rig.engine.store().room_backdrop(R).unwrap(), None);
     assert_eq!(resolves(&rig, X), None);
-    assert_eq!(shown_backdrop(&rig), None);
+    assert_eq!(carried_backdrop(&rig), None);
 }

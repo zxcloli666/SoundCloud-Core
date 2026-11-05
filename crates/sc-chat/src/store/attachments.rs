@@ -44,10 +44,12 @@ pub fn replace(
     let mut insert = tx.prepare_cached(
         "INSERT INTO message_media (message_id, position, conversation_id, media_id, nonce, body) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )?;
+    let mut stored = 0u32;
     for (position, attachment) in attachments.iter().enumerate() {
         let Ok(media_id) = Uuid::parse_str(&attachment.media_id) else {
             continue;
         };
+        stored += 1;
         let position = position as u32;
         let sealed = seal::seal(
             &keys.body,
@@ -63,6 +65,8 @@ pub fn replace(
             sealed.body
         ])?;
     }
+    tx.prepare_cached("UPDATE messages SET media = ?2 WHERE id = ?1 AND media <> ?2")?
+        .execute(params![message_id, stored])?;
     Ok(())
 }
 

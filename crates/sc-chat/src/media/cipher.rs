@@ -1,7 +1,7 @@
 use zeroize::Zeroizing;
 
 use super::MediaError;
-use crate::store::seal;
+use crate::store::seal::{self, NONCE_LEN};
 
 pub const BLOCK: usize = 4096;
 const TAG: usize = 16;
@@ -35,10 +35,21 @@ pub fn sealed_len(plain_len: usize) -> usize {
 
 pub fn seal_blob(role: Role, plain: &[u8]) -> Result<Blob, MediaError> {
     let key = Zeroizing::new(sc_chat_wire::random_bytes::<32>().map_err(|_| MediaError::Random)?);
+    let nonce = sc_chat_wire::random_bytes::<NONCE_LEN>().map_err(|_| MediaError::Random)?;
+    seal_at(role, key, &nonce, plain)
+}
+
+fn seal_at(
+    role: Role,
+    key: Zeroizing<[u8; 32]>,
+    nonce: &[u8; NONCE_LEN],
+    plain: &[u8],
+) -> Result<Blob, MediaError> {
     let mut padded = Zeroizing::new(vec![0u8; sealed_len(plain.len()) - TAG]);
     padded[..plain.len()].copy_from_slice(plain);
     padded[plain.len()] = PAD_MARK;
-    let sealed = seal::seal(&key, &role.aad(), &padded).map_err(|_| MediaError::Cipher)?;
+    let sealed =
+        seal::seal_at(&key, nonce, &role.aad(), &padded).map_err(|_| MediaError::Cipher)?;
     Ok(Blob {
         ciphertext: sealed.body,
         key,
@@ -66,3 +77,7 @@ pub fn open_blob(
     plain.truncate(end);
     Ok(plain)
 }
+
+#[cfg(test)]
+#[path = "cipher_vectors.rs"]
+mod vectors;

@@ -65,6 +65,10 @@ impl ChatClient {
         self.chat.network_changed();
     }
 
+    pub fn retry_keychain(&self) {
+        self.chat.retry_keychain();
+    }
+
     pub async fn login_begin(&self, target: LoginTarget) -> Result<LoginBegin, ChatError> {
         self.run(|chat| async move { chat.login_begin(target).await })
             .await
@@ -100,6 +104,16 @@ impl ChatClient {
 
     pub async fn conversations(&self, query: ListQuery) -> Result<ConversationPage, ChatError> {
         self.run(|chat| async move { chat.conversations(query).await })
+            .await
+    }
+
+    pub async fn images_before(
+        &self,
+        conversation_id: ConvId,
+        before: Option<Seq>,
+        limit: u32,
+    ) -> Result<HistoryPage, ChatError> {
+        self.run(|chat| async move { chat.images_before(conversation_id, before, limit).await })
             .await
     }
 

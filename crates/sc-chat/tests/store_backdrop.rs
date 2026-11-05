@@ -1,7 +1,10 @@
 mod store_support;
 
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject};
-use sc_chat::{BackdropChange, ChatError, ConversationKind, ConversationMeta, MediaKind};
+use sc_chat::{
+    BackdropChange, ChatError, ConversationKind, ConversationMeta, ConversationPatch, MediaKind,
+    MetaPatch,
+};
 use store_support::{avatar, conv, count, store, summary};
 use uuid::Uuid;
 
@@ -158,4 +161,23 @@ fn a_gone_room_takes_its_backdrop_key() {
     store.purge_conversations(&[id]).unwrap();
     assert_eq!(store.room_backdrop(id).unwrap(), None);
     assert_eq!(store.attachment(id, Uuid::from_u128(0x61)).unwrap(), None);
+}
+
+#[test]
+fn a_group_meta_is_never_built_for_a_room_or_an_unknown_conversation() {
+    let store = store();
+    let id = room(&store);
+    let rename = ConversationPatch {
+        meta: Some(MetaPatch {
+            title: Some("Ночная смена".into()),
+            description: None,
+        }),
+        ..ConversationPatch::default()
+    };
+    assert_eq!(store.next_meta(id, &rename).err(), Some(ChatError::Invalid));
+    assert_eq!(
+        store.next_meta(conv(), &rename).err(),
+        Some(ChatError::Invalid)
+    );
+    assert_eq!(store.group_meta(id).unwrap(), None);
 }

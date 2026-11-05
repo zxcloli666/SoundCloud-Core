@@ -64,8 +64,6 @@ pub enum ChatError {
     Invalid,
     #[error("not found")]
     NotFound,
-    #[error("not implemented")]
-    Unimplemented,
     #[error("the server failed")]
     Internal,
     #[error("no tier reached the server")]
@@ -76,6 +74,8 @@ pub enum ChatError {
     Store,
     #[error("the keychain failed")]
     Keychain,
+    #[error("the user denied keychain access")]
+    KeychainDenied,
     #[error("a key or ciphertext did not open")]
     Crypto,
     #[error("the answer is malformed")]
@@ -131,7 +131,6 @@ impl ChatError {
             },
             "invalid" => Self::Invalid,
             "not_found" => Self::NotFound,
-            "unimplemented" => Self::Unimplemented,
             "internal" => Self::Internal,
             _ => Self::Protocol,
         }

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+mod keys;
+
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -13,34 +14,9 @@ use sc_chat::store::Store;
 use sc_chat::{
     ChatError, CoreEvent, KeyName, MediaUploadsEvent, Tier, TransportRequest, TransportResponse,
 };
-use sc_chat_ffi::{
-    ChatClient, ChatKeys, ChatListener, ChatSetup, ChatTransport, KeyFailure, NetFailure,
-};
+use sc_chat_ffi::{ChatClient, ChatKeys, ChatListener, ChatSetup, ChatTransport, NetFailure};
 
-#[derive(Default)]
-pub struct MemoryKeys(Mutex<HashMap<KeyName, Vec<u8>>>);
-
-impl MemoryKeys {
-    pub fn names(&self) -> Vec<KeyName> {
-        self.0.lock().unwrap().keys().copied().collect()
-    }
-}
-
-impl ChatKeys for MemoryKeys {
-    fn load(&self, name: KeyName) -> Result<Option<Vec<u8>>, KeyFailure> {
-        Ok(self.0.lock().unwrap().get(&name).cloned())
-    }
-
-    fn save(&self, name: KeyName, secret: Vec<u8>) -> Result<(), KeyFailure> {
-        self.0.lock().unwrap().insert(name, secret);
-        Ok(())
-    }
-
-    fn delete(&self, name: KeyName) -> Result<(), KeyFailure> {
-        self.0.lock().unwrap().remove(&name);
-        Ok(())
-    }
-}
+pub use keys::MemoryKeys;
 
 #[derive(Default)]
 pub struct Garbage(Mutex<Vec<TransportRequest>>);

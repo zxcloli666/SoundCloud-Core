@@ -1,19 +1,18 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use sc_chat::MediaKind;
 use sc_chat::media::prepare_image;
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject, UploadState};
-use sc_chat::{ChatError, MediaKind};
 use uuid::Uuid;
 
 use crate::support::*;
 
-const MASTER: [u8; 32] = [5; 32];
+pub const MASTER: [u8; 32] = [5; 32];
 const CONVERSATION: Uuid = Uuid::from_u128(0xc0);
-const IMAGE_ID: Uuid = Uuid::from_u128(0x1a);
+pub const IMAGE_ID: Uuid = Uuid::from_u128(0x1a);
 const THUMB_ID: Uuid = Uuid::from_u128(0x1b);
 
-fn upload(album: Uuid, position: u32) -> NewUpload {
+pub fn upload(album: Uuid, position: u32) -> NewUpload {
     let prepared = prepare_image(&jpeg(&photo(64, 48))).unwrap();
     NewUpload {
         album,
@@ -26,23 +25,11 @@ fn upload(album: Uuid, position: u32) -> NewUpload {
     }
 }
 
-fn reserved() -> Reserved {
+pub fn reserved() -> Reserved {
     Reserved {
         media_id: IMAGE_ID,
         thumb_media_id: Some(THUMB_ID),
         presign_expires_at: 10_000,
-    }
-}
-
-fn temp_db() -> PathBuf {
-    std::env::temp_dir().join(format!("sc-chat-media-{}.db", Uuid::new_v4()))
-}
-
-fn remove(path: &std::path::Path) {
-    for suffix in ["", "-wal", "-shm"] {
-        let mut name = path.as_os_str().to_owned();
-        name.push(suffix);
-        let _ = std::fs::remove_file(PathBuf::from(name));
     }
 }
 
@@ -217,70 +204,6 @@ fn failures_count_and_a_hard_one_ends_the_upload() {
 }
 
 #[test]
-fn a_restart_clears_the_reserve_and_keeps_the_file() {
-    let store = Store::open_in_memory(&MASTER).unwrap();
-    let id = store.enqueue_upload(&upload(Uuid::new_v4(), 0), 1).unwrap();
-    store.upload_reserved(id, &reserved(), 2).unwrap();
-    store
-        .upload_progress(id, UploadObject::Thumb, 3, Some("s"), 3)
-        .unwrap();
-    store.upload_restart(id, 4).unwrap();
-    let after = store.upload(id).unwrap().unwrap();
-    assert_eq!(after.state, UploadState::Queued);
-    assert_eq!(
-        (&after.media_id, &after.stage_id, after.parts_sent),
-        (&None, &None, 0)
-    );
-    assert!(after.presign_expired(0));
-    assert!(after.image_ref.ends_with(".img"));
-}
-
-#[test]
-fn an_album_survives_an_app_restart_with_its_keys_sealed() {
-    let path = temp_db();
-    let album = Uuid::new_v4();
-    let new = upload(album, 0);
-    let key = new.attachment.key.clone();
-    let id = {
-        let store = Store::open(&path, &MASTER).unwrap();
-        let id = store.enqueue_upload(&new, 10).unwrap();
-        store.upload_reserved(id, &reserved(), 20).unwrap();
-        store
-            .upload_progress(id, UploadObject::Image, 12, Some("stage-3"), 30)
-            .unwrap();
-        id
-    };
-
-    let raw: Vec<u8> = ["", "-wal"]
-        .iter()
-        .flat_map(|suffix| {
-            let mut name = path.as_os_str().to_owned();
-            name.push(suffix);
-            std::fs::read(PathBuf::from(name)).unwrap_or_default()
-        })
-        .collect();
-    assert!(!raw.windows(key.len()).any(|part| part == key.as_slice()));
-
-    let store = Store::open(&path, &MASTER).unwrap();
-    let resumed = store.next_upload().unwrap().unwrap();
-    assert_eq!(resumed.id, id);
-    assert_eq!(
-        (resumed.state, resumed.object, resumed.parts_sent),
-        (UploadState::Uploading, UploadObject::Image, 12)
-    );
-    assert_eq!(resumed.stage_id.as_deref(), Some("stage-3"));
-    assert_eq!(resumed.attachment.key, key);
-    assert_eq!(resumed.attachment.media_id, IMAGE_ID.to_string());
-    assert_eq!(resumed.media_id, Some(IMAGE_ID));
-
-    let refs = store.remove_album_uploads(album).unwrap();
-    assert_eq!(refs.len(), 1);
-    assert!(store.album_uploads(album).unwrap().is_empty());
-    drop(store);
-    remove(&path);
-}
-
-#[test]
 fn one_upload_leaves_its_album_and_the_rest_stays_in_order() {
     let store = Store::open_in_memory(&MASTER).unwrap();
     let seen = Arc::new(Seen::default());
@@ -311,16 +234,4 @@ fn one_upload_leaves_its_album_and_the_rest_stays_in_order() {
     assert_eq!(store.remove_upload(ids[1]).unwrap(), None);
     assert!(seen.take().is_empty());
     assert_eq!(store.next_upload().unwrap().unwrap().id, ids[0]);
-}
-
-#[test]
-fn a_wrong_store_key_does_not_read_the_queue() {
-    let path = temp_db();
-    {
-        let store = Store::open(&path, &MASTER).unwrap();
-        store.enqueue_upload(&upload(Uuid::new_v4(), 0), 1).unwrap();
-    }
-    let reopened = Store::open(&path, &[6; 32]);
-    assert_eq!(reopened.err(), Some(ChatError::Crypto));
-    remove(&path);
 }

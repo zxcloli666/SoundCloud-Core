@@ -56,10 +56,16 @@ impl<L: Local> SyncEngine<L> {
             }
         }
         if let Some(newest) = installed.last() {
+            let now = self.now();
             self.with(|state| {
                 state.note_epoch(conversation_id, *newest);
                 for epoch in &installed {
                     state.locked_keys.remove(&(conversation_id, *epoch));
+                }
+                let locked = state.room_meta_locked.get(&conversation_id).copied();
+                if locked.is_some_and(|epoch| installed.contains(&epoch)) {
+                    state.room_meta_locked.remove(&conversation_id);
+                    state.room_meta_due.insert(conversation_id, now);
                 }
             });
         }

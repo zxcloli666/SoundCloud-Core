@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use super::{Store, StoreKeys, seal};
 use crate::contracts::{
-    AvatarChange, ChatError, ChatResult, ConvId, ConversationMeta, ConversationPatch, MediaKind,
-    UploadState,
+    AvatarChange, ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta,
+    ConversationPatch, MediaKind, UploadState,
 };
 use crate::envelope::{self, Content};
 
@@ -36,13 +36,14 @@ impl Store {
     }
 
     pub fn next_meta(&self, id: ConvId, patch: &ConversationPatch) -> ChatResult<ConversationMeta> {
+        let summary = self
+            .conversation(id)?
+            .filter(|summary| summary.kind == ConversationKind::Group)
+            .ok_or(ChatError::Invalid)?;
         let mut next = match self.group_meta(id)? {
             Some(meta) => meta,
             None => ConversationMeta {
-                title: self
-                    .conversation(id)?
-                    .and_then(|summary| summary.title)
-                    .unwrap_or_default(),
+                title: summary.title.unwrap_or_default(),
                 ..ConversationMeta::default()
             },
         };

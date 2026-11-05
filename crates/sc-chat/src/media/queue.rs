@@ -2,7 +2,9 @@ use uuid::Uuid;
 
 use super::URLS_MAX;
 use crate::api::Api;
-use crate::api::wire::{CommitAnswer, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest};
+use crate::api::wire::{
+    CommitAnswer, MediaSelection, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest,
+};
 use crate::contracts::{ChatError, ChatResult, ConvId, MediaKind, Millis};
 use crate::store::{MediaUpload, Reserved, Store, UploadObject};
 
@@ -60,10 +62,13 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
     let upload = store.upload(id)?.ok_or(ChatError::NotFound)?;
     let media_id = upload.media_id.ok_or(ChatError::Invalid)?;
     match api.commit_media(media_id).await {
-        Ok(answer) => {
-            store.upload_committed(id, now)?;
-            Ok(answer)
-        }
+        Ok(answer) => match store.upload_committed(id, now) {
+            Err(ChatError::NotFound) => {
+                let _ = api.delete_media(&MediaSelection::ids(vec![media_id])).await;
+                Err(ChatError::NotFound)
+            }
+            committed => committed.map(|()| answer),
+        },
         Err(ChatError::MediaMissing { ids }) => {
             let only_thumb =
                 upload.kind == MediaKind::Image && !ids.is_empty() && !ids.contains(&media_id);

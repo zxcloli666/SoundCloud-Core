@@ -3,9 +3,9 @@ use rusqlite::Connection;
 #[path = "migrations_media.rs"]
 mod media;
 
-use media::{V3, V4, V5};
+use media::{V3, V4, V5, V6};
 
-pub const VERSION: i64 = 5;
+pub const VERSION: i64 = 6;
 
 const V1: &str = "
 CREATE TABLE meta (
@@ -143,7 +143,7 @@ CREATE TABLE hidden_messages (
 ) WITHOUT ROWID;
 ";
 
-const STEPS: [&str; 5] = [V1, V2, V3, V4, V5];
+const STEPS: [&str; 6] = [V1, V2, V3, V4, V5, V6];
 
 pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "secure_delete", "ON")?;
@@ -171,3 +171,7 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
 #[cfg(test)]
 #[path = "migrations_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "migrations_media_tests.rs"]
+mod media_tests;

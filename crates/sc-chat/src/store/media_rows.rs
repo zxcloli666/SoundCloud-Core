@@ -1,3 +1,5 @@
+use std::fmt;
+
 use rusqlite::{Connection, Row};
 use sc_chat_wire::prost::Message;
 use sc_chat_wire::proto::Attachment;
@@ -9,7 +11,7 @@ use crate::contracts::{
     ChatError, ChatResult, ConvId, MediaKind, Millis, UploadObject, UploadState,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct MediaUpload {
     pub id: Uuid,
     pub album: Uuid,
@@ -36,7 +38,7 @@ impl MediaUpload {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NewUpload {
     pub album: Uuid,
     pub position: u32,
@@ -45,6 +47,60 @@ pub struct NewUpload {
     pub image_ref: String,
     pub thumb_ref: Option<String>,
     pub attachment: Attachment,
+}
+
+impl fmt::Debug for MediaUpload {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MediaUpload")
+            .field("id", &self.id)
+            .field("album", &self.album)
+            .field("position", &self.position)
+            .field("conversation_id", &self.conversation_id)
+            .field("kind", &self.kind)
+            .field("image_ref", &self.image_ref)
+            .field("thumb_ref", &self.thumb_ref)
+            .field("attachment", &Unkeyed(&self.attachment))
+            .field("state", &self.state)
+            .field("object", &self.object)
+            .field("media_id", &self.media_id)
+            .field("stage_id", &self.stage_id)
+            .field("parts_sent", &self.parts_sent)
+            .field("presign_expires_at", &self.presign_expires_at)
+            .field("attempts", &self.attempts)
+            .field("created_at", &self.created_at)
+            .field("updated_at", &self.updated_at)
+            .finish()
+    }
+}
+
+impl fmt::Debug for NewUpload {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NewUpload")
+            .field("album", &self.album)
+            .field("position", &self.position)
+            .field("conversation_id", &self.conversation_id)
+            .field("kind", &self.kind)
+            .field("image_ref", &self.image_ref)
+            .field("thumb_ref", &self.thumb_ref)
+            .field("attachment", &Unkeyed(&self.attachment))
+            .finish()
+    }
+}
+
+struct Unkeyed<'a>(&'a Attachment);
+
+impl fmt::Debug for Unkeyed<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let thumb = self.0.thumb.as_ref();
+        f.debug_struct("Attachment")
+            .field("media_id", &self.0.media_id)
+            .field("size", &self.0.size)
+            .field("w", &self.0.w)
+            .field("h", &self.0.h)
+            .field("thumb_media_id", &thumb.map(|thumb| &thumb.media_id))
+            .field("thumb_size", &thumb.map(|thumb| thumb.size))
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -118,3 +174,7 @@ fn raw(row: &Row) -> rusqlite::Result<Raw> {
         sealed: row.get(17)?,
     })
 }
+
+#[cfg(test)]
+#[path = "media_rows_tests.rs"]
+mod tests;

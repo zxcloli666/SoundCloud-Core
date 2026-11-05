@@ -42,8 +42,8 @@ impl Store {
     }
 
     fn not_a_room(&self, id: ConvId) -> ChatResult<bool> {
-        Ok(self
+        Ok(!self
             .conversation(id)?
-            .is_some_and(|summary| summary.kind != ConversationKind::Room))
+            .is_some_and(|summary| summary.kind == ConversationKind::Room))
     }
 }

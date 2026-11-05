@@ -110,11 +110,14 @@ pub fn resolves(rig: &Real, n: u128) -> Option<Attachment> {
         .unwrap()
 }
 
-pub fn shown_backdrop(rig: &Real) -> Option<Uuid> {
-    rig.engine
-        .store()
-        .conversation(R)
+pub fn carried_backdrop(rig: &Real) -> Option<Uuid> {
+    let store = rig.engine.store();
+    assert_eq!(
+        store.conversation(R).unwrap().unwrap().avatar_media_id,
+        None
+    );
+    store
+        .room_backdrop(R)
         .unwrap()
-        .unwrap()
-        .avatar_media_id
+        .map(|image| Uuid::parse_str(&image.media_id).unwrap())
 }

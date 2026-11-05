@@ -70,8 +70,14 @@ async fn an_album_is_sent_only_once_every_image_is_committed() {
 async fn avatar_and_backdrop_changes_take_only_committed_uploads() {
     let rig = Rig::new();
     rig.with_store().await;
+    let group = Uuid::from_u128(0x6b);
+    let mut seat = summary(ROOM, ConversationKind::Room);
+    seat.room_code = Some("ROOM42".into());
+    rig.side_store()
+        .put_conversations(&[seat, summary(group, ConversationKind::Group)])
+        .unwrap();
     let missing = settle(rig.client.set_group_avatar(
-        ROOM,
+        group,
         AvatarChange::Set {
             upload_id: Uuid::new_v4(),
         },
@@ -88,14 +94,13 @@ async fn avatar_and_backdrop_changes_take_only_committed_uploads() {
     )
     .await
     .unwrap();
-    let pending = settle(rig.client.set_room_backdrop(
-        "ROOM42".into(),
-        ROOM,
-        BackdropChange::Set { upload_id: row.id },
-    ))
+    let pending = settle(
+        rig.client
+            .set_room_backdrop(ROOM, BackdropChange::Set { upload_id: row.id }),
+    )
     .await;
     assert_eq!(pending.err(), Some(ChatError::Invalid));
-    assert_eq!(settle(rig.client.room_backdrop(ROOM)).await.unwrap(), None);
+    assert_eq!(rig.side_store().room_backdrop(ROOM).unwrap(), None);
 }
 
 #[tokio::test]

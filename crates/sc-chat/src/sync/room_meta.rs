@@ -1,5 +1,5 @@
-use super::conversations::MetaRead;
 use super::local::Local;
+use super::meta_read::MetaRead;
 use super::{SyncEngine, fatal, transient};
 use crate::api::wire::MessageView;
 use crate::contracts::{
@@ -30,31 +30,46 @@ impl<L: Local> SyncEngine<L> {
         }
         let now = self.now();
         let due = self.with(|state| {
-            state
+            let due = state
                 .room_meta_due
                 .get(&summary.id)
-                .is_some_and(|at| *at <= now)
+                .is_some_and(|at| *at <= now);
+            due || !state.room_meta_read.contains(&summary.id)
         });
         if refresh || due {
             self.refresh_room_meta(summary.id).await?;
         }
-        summary.avatar_media_id = self.store.meta_image(summary.id)?;
+        summary.avatar_media_id = None;
         Ok(())
     }
 
     async fn refresh_room_meta(&self, id: ConvId) -> ChatResult<()> {
-        self.with(|state| state.room_meta_due.remove(&id));
+        self.with(|state| {
+            state.room_meta_due.remove(&id);
+            state.room_meta_read.insert(id);
+        });
         let view = match self.api.conversation(id).await {
-            Ok(view) => view,
+            Ok(view) if view.id == id => view,
+            Ok(_) => return self.room_meta_missed(id, ChatError::Protocol),
             Err(error) => return self.room_meta_missed(id, error),
         };
         self.note_view(&view);
-        let meta = match self.read_meta(&view).await {
-            Ok(MetaRead::Open(meta)) => Some(*meta),
-            Ok(MetaRead::Absent | MetaRead::Locked) => None,
+        let read = match self.read_meta(&view).await {
+            Ok(read) => read,
             Err(error) => return self.room_meta_missed(id, error),
         };
-        self.store.put_room_meta(id, meta.as_ref())
+        self.keep_room_meta(id, read)
+    }
+
+    pub(super) fn keep_room_meta(&self, id: ConvId, read: MetaRead) -> ChatResult<()> {
+        self.with(|state| {
+            state.room_meta_read.insert(id);
+            match &read {
+                MetaRead::Locked(Some(epoch)) => state.room_meta_locked.insert(id, *epoch),
+                _ => state.room_meta_locked.remove(&id),
+            }
+        });
+        self.store.put_room_meta(id, read.opened().as_ref())
     }
 
     fn room_meta_missed(&self, id: ConvId, error: ChatError) -> ChatResult<()> {

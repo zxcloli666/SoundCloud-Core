@@ -1,5 +1,6 @@
 use sc_chat::media::{MediaWorker, Role, open_blob, open_image, prepare_image};
 
+use crate::icc::{flat, p3_profile, p3_to_srgb, with_icc_jpeg, with_icc_png, with_icc_webp};
 use crate::support::*;
 
 const P3: [u8; 3] = [220, 90, 70];

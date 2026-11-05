@@ -77,7 +77,9 @@ async fn the_queue_and_media_calls_wait_for_the_store() {
     .await;
     assert_eq!(queued.err(), Some(ChatError::NotReady));
     assert_eq!(
-        settle(rig.client.room_backdrop(ROOM)).await.err(),
+        settle(rig.client.media_info(ROOM, Uuid::new_v4()))
+            .await
+            .err(),
         Some(ChatError::NotReady)
     );
     assert_eq!(

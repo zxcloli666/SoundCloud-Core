@@ -105,3 +105,12 @@ ALTER TABLE media_uploads_v5 RENAME TO media_uploads;
 CREATE INDEX media_uploads_album ON media_uploads (album, position);
 CREATE INDEX media_uploads_open ON media_uploads (created_at, position) WHERE state NOT IN ('committed', 'failed');
 ";
+
+pub const V6: &str = "
+ALTER TABLE messages ADD COLUMN media INTEGER NOT NULL DEFAULT 0;
+
+UPDATE messages SET media = (SELECT count(*) FROM message_media WHERE message_media.message_id = messages.id)
+WHERE id IN (SELECT message_id FROM message_media);
+
+CREATE INDEX messages_gallery ON messages (conversation_id, seq) WHERE media > 0;
+";

@@ -1,8 +1,10 @@
 use sc_chat_wire::proto::{Attachment, AttachmentKind as WireKind, Thumb};
 use uuid::Uuid;
 
-use crate::contracts::{AttachmentKind, MessageAttachment};
-use crate::media::{ALBUM_MAX, BACKDROP_SERVER_CAP, IMAGE_CAP, THUMB_SERVER_CAP};
+use crate::contracts::{AttachmentKind, ConversationMeta, MessageAttachment};
+use crate::media::{
+    ALBUM_MAX, AVATAR_SERVER_CAP, BACKDROP_SERVER_CAP, IMAGE_CAP, THUMB_SERVER_CAP,
+};
 
 const KEY_LEN: usize = 32;
 const NONCE_LEN: usize = 24;
@@ -42,6 +44,13 @@ pub fn image_ok(attachment: &Attachment) -> bool {
 
 pub fn meta_image_ok(attachment: &Attachment) -> bool {
     sealed_ok(attachment, BACKDROP_SERVER_CAP) && attachment.thumb.is_none()
+}
+
+pub fn group_meta(mut meta: ConversationMeta) -> ConversationMeta {
+    meta.avatar = meta
+        .avatar
+        .filter(|avatar| sealed_ok(avatar, AVATAR_SERVER_CAP));
+    meta
 }
 
 fn sealed_ok(attachment: &Attachment, cap: usize) -> bool {

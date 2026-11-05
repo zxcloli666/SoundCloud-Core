@@ -13,8 +13,17 @@ pub struct Sealed {
 
 pub fn seal(key: &[u8; 32], aad: &[u8], plain: &[u8]) -> ChatResult<Sealed> {
     let nonce = sc_chat_wire::random_bytes::<NONCE_LEN>().map_err(|_| ChatError::Crypto)?;
+    seal_at(key, &nonce, aad, plain)
+}
+
+pub(crate) fn seal_at(
+    key: &[u8; 32],
+    nonce: &[u8; NONCE_LEN],
+    aad: &[u8],
+    plain: &[u8],
+) -> ChatResult<Sealed> {
     let body = XChaCha20Poly1305::new(key.into())
-        .encrypt(XNonce::from_slice(&nonce), Payload { msg: plain, aad })
+        .encrypt(XNonce::from_slice(nonce), Payload { msg: plain, aad })
         .map_err(|_| ChatError::Crypto)?;
     Ok(Sealed {
         nonce: nonce.to_vec(),

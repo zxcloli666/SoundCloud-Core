@@ -11,7 +11,6 @@ use super::{Chat, Core, retry};
 
 const OFF_RECHECK_MS: u64 = 3_600_000;
 const OFF_SPREAD_MS: u64 = 600_000;
-const STUB_RETRY: Duration = Duration::from_secs(60);
 const FIRST_FAILURE: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,7 +108,7 @@ impl Chat {
             ChatError::SessionBoundOther => Halt::Phase(ChatPhase::BoundOther),
             ChatError::DeviceRevoked => Halt::Phase(ChatPhase::Revoked),
             ChatError::Disabled => Halt::Phase(ChatPhase::Off),
-            ChatError::Unimplemented => Halt::Retry(STUB_RETRY),
+            ChatError::KeychainDenied => Halt::Phase(ChatPhase::KeychainDenied),
             ChatError::Busy { retry_ms } => Halt::Retry(retry::busy(*retry_ms)),
             ChatError::Clock { server_now } => {
                 self.api.channel().note_server_now(*server_now);

@@ -1,3 +1,4 @@
+mod backdrop;
 mod cipher;
 mod error;
 mod ladder;
@@ -8,6 +9,7 @@ mod refs;
 mod source;
 mod worker;
 
+pub use backdrop::BackdropStep;
 pub use cipher::{BLOCK, Blob, Role, open_blob, seal_blob, sealed_len};
 pub use error::MediaError;
 pub use open::{OpenedImage, open_image, open_thumb};

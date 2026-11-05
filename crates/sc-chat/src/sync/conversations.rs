@@ -9,17 +9,11 @@ use crate::contracts::{
     CoreEvent, HistoryQuery, Seq, SyncEvent, SystemKind, UserId, UserRef,
 };
 use crate::embeds::clean;
-use crate::envelope::{self, Content};
+use crate::envelope::attachments;
 
 pub const RENDER_MAX: u32 = 200;
 
-pub(super) enum MetaRead {
-    Absent,
-    Locked,
-    Open(Box<ConversationMeta>),
-}
-
-pub(super) fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
+fn avatar_id(meta: &ConversationMeta) -> Option<Uuid> {
     let avatar = meta.avatar.as_ref()?;
     Uuid::parse_str(&avatar.media_id).ok()
 }
@@ -95,9 +89,13 @@ impl<L: Local> SyncEngine<L> {
         view: &ConversationView,
         existing: Option<&ConversationSummary>,
     ) -> ChatResult<ConversationSummary> {
-        let meta = match self.read_meta(view).await? {
-            MetaRead::Open(meta) => Some(*meta),
-            MetaRead::Absent | MetaRead::Locked => None,
+        let read = self.read_meta(view).await?;
+        let meta = match view.kind {
+            ConversationKind::Room => {
+                self.keep_room_meta(view.id, read)?;
+                None
+            }
+            _ => read.opened().map(attachments::group_meta),
         };
         if let Some(meta) = &meta {
             self.store.put_group_meta(view.id, meta)?;
@@ -116,7 +114,10 @@ impl<L: Local> SyncEngine<L> {
             title: meta
                 .as_ref()
                 .and_then(|meta| clean::optional_text(Some(&meta.title), clean::TEXT_MAX)),
-            avatar_media_id: meta.as_ref().map(avatar_id),
+            avatar_media_id: match view.kind {
+                ConversationKind::Room => Some(None),
+                _ => meta.as_ref().map(avatar_id),
+            },
             peer,
             history_locked,
         };
@@ -127,25 +128,6 @@ impl<L: Local> SyncEngine<L> {
         if let Ok(epoch) = u32::try_from(view.key_epoch) {
             self.with(|state| state.note_epoch(view.id, epoch));
         }
-    }
-
-    pub(super) async fn read_meta(&self, view: &ConversationView) -> ChatResult<MetaRead> {
-        let (Some(meta_ct), Some(epoch)) = (&view.meta_ct, view.meta_epoch) else {
-            return Ok(MetaRead::Absent);
-        };
-        let Ok(epoch) = u32::try_from(epoch) else {
-            return Ok(MetaRead::Locked);
-        };
-        let Some(ck) = self.key(view.id, epoch).await? else {
-            return Ok(MetaRead::Locked);
-        };
-        let Ok(envelope) = self.cipher.open_meta(&ck, view.id, epoch, meta_ct) else {
-            return Ok(MetaRead::Locked);
-        };
-        Ok(match envelope::decode(&envelope) {
-            Ok(Content::Meta(meta)) => MetaRead::Open(Box::new(meta)),
-            _ => MetaRead::Locked,
-        })
     }
 
     async fn user_ref(&self, user_id: &UserId) -> ChatResult<UserRef> {

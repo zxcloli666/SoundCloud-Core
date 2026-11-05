@@ -4,9 +4,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::items::{self, Item};
 use super::project::{self, Context};
-use super::{Store, StoreKeys, StoredContent, content, meta, people};
+use super::{Store, StoreKeys, meta, people};
 use crate::contracts::{ChatResult, ConvId, HistoryPage, HistoryQuery, Message, Seq};
-use crate::envelope::Content;
 
 const PAGE_DEFAULT: u32 = 50;
 const PAGE_MAX: u32 = 200;
@@ -23,10 +22,7 @@ impl Store {
             me: me.as_deref(),
             marks: &marks,
         };
-        let limit = match query.limit {
-            0 => PAGE_DEFAULT,
-            limit => limit.min(PAGE_MAX),
-        } as usize;
+        let limit = page_limit(query.limit);
         let (rows, more) = server_page(&conn, &self.keys, id, query, limit)?;
         let cursor = query.before.is_some() || query.after.is_some();
         let locals = if rows.is_empty() && cursor {
@@ -55,37 +51,14 @@ impl Store {
             .collect();
         Ok(project_rows(conn, &self.keys, id, &rows, context)?.pop())
     }
+}
 
-    pub fn pins(&self, id: ConvId) -> ChatResult<Vec<Seq>> {
-        let conn = self.conn()?;
-        let rows = items::load(
-            &conn,
-            &self.keys,
-            "conversation_id = ?1 AND class = 'pin' ORDER BY seq",
-            [id.as_bytes()],
-        )?;
-        let mut pinned: Vec<Seq> = Vec::new();
-        for row in rows {
-            let StoredContent::Open(bytes) = &row.message.content else {
-                continue;
-            };
-            let Content::Pin { target, on } = content::decode(bytes) else {
-                continue;
-            };
-            let Some(target) = row
-                .message
-                .target_seq
-                .filter(|seq| project::aims_at(&row.message, target, Some(*seq)))
-            else {
-                continue;
-            };
-            pinned.retain(|seq| *seq != target);
-            if on {
-                pinned.push(target);
-            }
-        }
-        Ok(pinned)
-    }
+pub fn page_limit(asked: u32) -> usize {
+    let limit = match asked {
+        0 => PAGE_DEFAULT,
+        limit => limit.min(PAGE_MAX),
+    };
+    limit as usize
 }
 
 pub fn latest(
@@ -218,7 +191,7 @@ fn merge(rows: Vec<Item>, locals: Vec<Item>) -> Vec<Item> {
     merged
 }
 
-fn project_rows(
+pub fn project_rows(
     conn: &Connection,
     keys: &StoreKeys,
     id: ConvId,

@@ -3,8 +3,8 @@ mod store_support;
 mod sync_support;
 
 use room_support::{
-    R, X, Y, backdrop, conversation_gets, conversation_path, joined, keys_gets, live, meta_message,
-    resolves, room_meta, room_view, shown_backdrop,
+    R, X, Y, backdrop, carried_backdrop, conversation_gets, conversation_path, joined, keys_gets,
+    live, meta_message, resolves, room_meta, room_view,
 };
 use sc_chat::MessageClass;
 use sc_chat::api::wire::b64;
@@ -30,7 +30,7 @@ async fn a_member_who_joins_later_resolves_the_current_backdrop() {
         Some(backdrop(X))
     );
     assert_eq!(resolves(&rig, X), Some(backdrop(X)));
-    assert_eq!(shown_backdrop(&rig), Some(Uuid::from_u128(X)));
+    assert_eq!(carried_backdrop(&rig), Some(Uuid::from_u128(X)));
     assert_eq!(conversation_gets(&rig), 1);
 }
 
@@ -54,12 +54,15 @@ async fn the_host_replaces_then_clears_and_every_member_follows_with_one_fetch_p
     assert_eq!(conversation_gets(&rig), 2);
     assert_eq!(resolves(&rig, X), None);
     assert_eq!(resolves(&rig, Y), Some(backdrop(Y)));
-    assert_eq!(shown_backdrop(&rig), Some(Uuid::from_u128(Y)));
+    assert_eq!(carried_backdrop(&rig), Some(Uuid::from_u128(Y)));
     let synced = rig.events.syncs();
     let last = synced.last().unwrap();
     assert_eq!(
-        last.conversations[0].avatar_media_id,
-        Some(Uuid::from_u128(Y))
+        (
+            last.conversations[0].id,
+            last.conversations[0].avatar_media_id
+        ),
+        (R, None)
     );
 
     live(&rig, 3, 8, vec![post(R, 8, 1, "no meta here")]).await;
@@ -74,7 +77,7 @@ async fn the_host_replaces_then_clears_and_every_member_follows_with_one_fetch_p
     assert_eq!(conversation_gets(&rig), 3);
     assert_eq!(rig.engine.store().room_backdrop(R).unwrap(), None);
     assert_eq!(resolves(&rig, Y), None);
-    assert_eq!(shown_backdrop(&rig), None);
+    assert_eq!(carried_backdrop(&rig), None);
     assert_eq!(keys_gets(&rig), 1);
 }
 
@@ -86,7 +89,7 @@ async fn a_missing_key_leaves_the_backdrop_unresolved_without_a_retry_loop() {
     joined(&rig, room_view(Some(&room_meta(Some(X))), 1)).await;
     assert_eq!(rig.engine.store().room_backdrop(R).unwrap(), None);
     assert_eq!(resolves(&rig, X), None);
-    assert_eq!(shown_backdrop(&rig), None);
+    assert_eq!(carried_backdrop(&rig), None);
     assert_eq!((conversation_gets(&rig), keys_gets(&rig)), (1, 1));
 
     for (pos, seq) in [(2, 5), (3, 6), (4, 7)] {
@@ -173,6 +176,6 @@ async fn a_meta_this_device_cannot_open_drops_the_old_backdrop() {
     assert_eq!(rig.engine.store().room_backdrop(R).unwrap(), None);
     assert_eq!(resolves(&rig, X), None);
     assert_eq!(resolves(&rig, Y), None);
-    assert_eq!(shown_backdrop(&rig), None);
+    assert_eq!(carried_backdrop(&rig), None);
     assert_eq!((conversation_gets(&rig), keys_gets(&rig)), (2, 2));
 }
