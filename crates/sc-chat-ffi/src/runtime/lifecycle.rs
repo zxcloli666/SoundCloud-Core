@@ -6,7 +6,7 @@ use sc_chat::api::{Api, Identity};
 use sc_chat::crypto::DeviceKeys;
 use sc_chat::{ChatError, ChatPhase, ChatResult, HistoryGate, KeyName, KeyStore};
 
-use super::session::{AuthMove, auth_move};
+use super::session::{AuthMove, Seen, auth_move};
 use super::{Chat, Core, retry};
 
 const OFF_RECHECK_MS: u64 = 3_600_000;
@@ -25,14 +25,15 @@ impl Chat {
         let mut failures = 0;
         loop {
             let generation = self.generation();
-            let halt = match self.bring_up(&mut failures).await {
+            let seen = self.session.seen();
+            let halt = match self.bring_up(&seen, &mut failures).await {
                 Ok(core) => {
                     failures = 0;
                     self.drive(core, generation).await
                 }
                 Err(halt) => halt,
             };
-            self.settle(halt, generation).await;
+            self.settle(halt, generation, &seen).await;
         }
     }
 
@@ -145,7 +146,7 @@ impl Chat {
         }
     }
 
-    async fn settle(&self, halt: Halt, generation: u64) {
+    async fn settle(&self, halt: Halt, generation: u64, seen: &Seen) {
         match halt {
             Halt::Restart => {}
             Halt::Retry(pause) => {
@@ -160,11 +161,13 @@ impl Chat {
                     status.phase = phase;
                     status.online = false;
                 });
-                let generation = if phase == ChatPhase::Revoked {
-                    let _ = self.wipe(true).await;
-                    generation + 1
-                } else {
-                    generation
+                let generation = match phase {
+                    ChatPhase::Revoked => {
+                        let _ = self.wipe(true).await;
+                        generation + 1
+                    }
+                    ChatPhase::KeychainDenied => self.answered(generation, seen),
+                    _ => generation,
                 };
                 if phase == ChatPhase::Off {
                     let recheck = OFF_RECHECK_MS + retry::jitter(OFF_SPREAD_MS);
@@ -173,6 +176,15 @@ impl Chat {
                     self.restarted(generation).await;
                 }
             }
+        }
+    }
+
+    fn answered(&self, generation: u64, seen: &Seen) -> u64 {
+        let now = self.generation();
+        if self.session.seen() == *seen {
+            now
+        } else {
+            generation
         }
     }
 

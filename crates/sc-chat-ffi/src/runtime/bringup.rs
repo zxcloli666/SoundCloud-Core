@@ -7,14 +7,19 @@ use sc_chat::{
     UserId,
 };
 
+use super::session::Seen;
 use super::{Chat, Core, Halt};
 
 impl Chat {
-    pub(super) async fn bring_up(self: &Arc<Self>, failures: &mut u32) -> Result<Arc<Core>, Halt> {
-        let Some(session_id) = self.session.current() else {
+    pub(super) async fn bring_up(
+        self: &Arc<Self>,
+        seen: &Seen,
+        failures: &mut u32,
+    ) -> Result<Arc<Core>, Halt> {
+        let Some(session_id) = seen.session_id.clone() else {
             return Err(Halt::Phase(ChatPhase::SignedOut));
         };
-        if self.session.logged_out() {
+        if seen.logged_out {
             return Err(Halt::Phase(ChatPhase::Unbound));
         }
         self.feed

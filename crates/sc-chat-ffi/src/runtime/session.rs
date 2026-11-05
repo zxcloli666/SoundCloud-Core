@@ -12,6 +12,12 @@ pub enum AuthMove {
     DropDevice,
 }
 
+#[derive(PartialEq, Eq)]
+pub struct Seen {
+    pub session_id: Option<String>,
+    pub logged_out: bool,
+}
+
 #[derive(Default)]
 pub struct Session {
     current: Mutex<Option<String>>,
@@ -37,6 +43,13 @@ impl Session {
 
     pub fn logged_out(&self) -> bool {
         self.logged_out.load(Ordering::Acquire)
+    }
+
+    pub fn seen(&self) -> Seen {
+        Seen {
+            session_id: self.current(),
+            logged_out: self.logged_out(),
+        }
     }
 }
 
