@@ -12,7 +12,8 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageEncoder, Rgb, RgbImage};
 use sc_chat::store::Store;
 use sc_chat::{
-    ChatError, CoreEvent, KeyName, MediaUploadsEvent, Tier, TransportRequest, TransportResponse,
+    ChatError, ChatPhase, CoreEvent, KeyName, MediaUploadsEvent, Tier, TransportRequest,
+    TransportResponse,
 };
 use sc_chat_ffi::{ChatClient, ChatKeys, ChatListener, ChatSetup, ChatTransport, NetFailure};
 
@@ -68,6 +69,23 @@ impl Recorder {
             .iter()
             .filter(|event| matches!(event, CoreEvent::Status(_)))
             .count()
+    }
+
+    pub fn phases(&self) -> Vec<ChatPhase> {
+        self.seen
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|event| match event {
+                CoreEvent::Status(status) => Some(status.phase),
+                _ => None,
+            })
+            .fold(Vec::new(), |mut phases, phase| {
+                if phases.last() != Some(&phase) {
+                    phases.push(phase);
+                }
+                phases
+            })
     }
 
     pub fn uploads(&self) -> Vec<MediaUploadsEvent> {

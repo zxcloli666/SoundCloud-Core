@@ -14,6 +14,7 @@ mod history;
 mod items;
 mod local;
 mod media;
+mod media_commit;
 mod media_rows;
 mod media_watch;
 pub(crate) mod messages;
@@ -25,6 +26,7 @@ pub(crate) mod project;
 mod purge;
 pub(crate) mod seal;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::AtomicI64;
@@ -123,6 +125,7 @@ pub struct Store {
     keys: StoreKeys,
     compacted_at: AtomicI64,
     uploads_watch: RwLock<Option<Arc<dyn Events>>>,
+    committed: Mutex<HashSet<Uuid>>,
 }
 
 impl Store {
@@ -159,6 +162,7 @@ impl Store {
             keys,
             compacted_at: AtomicI64::new(Millis::MIN),
             uploads_watch: RwLock::new(None),
+            committed: Mutex::new(HashSet::new()),
         })
     }
 

@@ -178,6 +178,7 @@ impl<L: Local> SyncEngine<L> {
                 state.room_meta_due.remove(id);
                 state.room_meta_read.remove(id);
                 state.room_meta_locked.remove(id);
+                state.room_meta_misses.remove(id);
             }
         });
         let mut touched: Vec<ConvId> = messages.iter().map(|gone| gone.conversation_id).collect();

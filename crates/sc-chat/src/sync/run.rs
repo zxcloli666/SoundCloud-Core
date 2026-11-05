@@ -51,9 +51,6 @@ impl<L: Local> SyncEngine<L> {
             if let Err(error) = self.flush_outbox().await {
                 self.failed(error)?;
             }
-            if let Err(error) = self.read_room_metas().await {
-                self.failed(error)?;
-            }
             let plan = match self.next_plan() {
                 Ok(plan) => plan,
                 Err(error) => {
@@ -68,7 +65,12 @@ impl<L: Local> SyncEngine<L> {
             };
             let pause = match self.settle(plan, polled).await? {
                 SyncOutcome::Changed | SyncOutcome::Idle if self.with(|state| state.more) => 0,
-                SyncOutcome::Changed | SyncOutcome::Idle => plan.delay_ms,
+                SyncOutcome::Changed | SyncOutcome::Idle => {
+                    if self.woken_during_metas().await? {
+                        continue;
+                    }
+                    plan.delay_ms
+                }
                 SyncOutcome::Reset => 0,
                 SyncOutcome::Retry { after_ms } => after_ms,
             };
@@ -80,6 +82,14 @@ impl<L: Local> SyncEngine<L> {
     pub async fn step(&self, plan: PollPlan) -> ChatResult<SyncOutcome> {
         let polled = self.poll(plan).await;
         self.settle(plan, polled).await
+    }
+
+    async fn woken_during_metas(&self) -> ChatResult<bool> {
+        match first(self.read_room_metas(), self.wake.wait()).await {
+            First::Left(Ok(_)) => Ok(false),
+            First::Left(Err(error)) => self.failed(error).map(|_| false),
+            First::Right(()) => Ok(true),
+        }
     }
 
     async fn pause(&self, clock: &dyn Clock, ms: u64) {

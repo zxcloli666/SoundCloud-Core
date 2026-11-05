@@ -63,8 +63,10 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
     let media_id = upload.media_id.ok_or(ChatError::Invalid)?;
     match api.commit_media(media_id).await {
         Ok(answer) => match store.upload_committed(id, now) {
-            Err(ChatError::NotFound) if upload.state != UploadState::Committed => {
-                let _ = api.delete_media(&MediaSelection::ids(vec![media_id])).await;
+            Err(ChatError::NotFound) => {
+                if upload.state != UploadState::Committed && !store.was_committed(id)? {
+                    let _ = api.delete_media(&MediaSelection::ids(vec![media_id])).await;
+                }
                 Err(ChatError::NotFound)
             }
             committed => committed.map(|()| answer),

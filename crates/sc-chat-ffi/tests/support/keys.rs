@@ -5,12 +5,15 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use sc_chat::KeyName;
 use sc_chat_ffi::{ChatKeys, KeyFailure};
 
+type Hook = Box<dyn Fn() + Send + Sync>;
+
 #[derive(Default)]
 pub struct MemoryKeys {
     secrets: Mutex<HashMap<KeyName, Vec<u8>>>,
     denied: AtomicBool,
     unavailable: AtomicBool,
     calls: AtomicUsize,
+    hook: Mutex<Option<Hook>>,
 }
 
 impl MemoryKeys {
@@ -26,12 +29,19 @@ impl MemoryKeys {
         self.unavailable.store(unavailable, Ordering::SeqCst);
     }
 
+    pub fn on_ask(&self, hook: impl Fn() + Send + Sync + 'static) {
+        *self.hook.lock().unwrap() = Some(Box::new(hook));
+    }
+
     pub fn calls(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
     }
 
     fn ask(&self) -> Result<(), KeyFailure> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(hook) = self.hook.lock().unwrap().as_ref() {
+            hook();
+        }
         if self.denied.load(Ordering::SeqCst) {
             return Err(KeyFailure::Denied {
                 reason: "the user pressed Deny".into(),

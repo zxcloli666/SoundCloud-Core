@@ -94,6 +94,35 @@ async fn a_committed_upload_removed_during_a_second_commit_keeps_its_server_copy
 }
 
 #[tokio::test]
+async fn a_parallel_commit_that_lands_first_and_sends_the_album_keeps_the_server_copy() {
+    let rig = rig();
+    let api = rig.engine.api();
+    let store = Arc::new(Store::open_in_memory(&[5; 32]).unwrap());
+    let id = queued(&store);
+    rig.server
+        .json("POST", "/chat/media/reserve", reserve_answer(IMAGE, THUMB));
+    let first = Arc::clone(&store);
+    rig.server.on(
+        "POST",
+        &format!("/chat/media/{IMAGE}/commit"),
+        Step::Run(
+            Box::new(move || first.upload_committed(id, START_MS).unwrap()),
+            Box::new(Step::Json(200, committed())),
+        ),
+    );
+    queue::reserve(api, &store, id, START_MS).await.unwrap();
+    uploaded(&store, id);
+    store.watch_uploads(Some(Arc::new(SendOnCommit(Arc::downgrade(&store)))));
+
+    assert_eq!(
+        queue::commit(api, &store, id, START_MS).await.unwrap_err(),
+        ChatError::NotFound
+    );
+    assert!(store.upload(id).unwrap().is_none());
+    assert!(rig.server.calls_to("POST", "/chat/media/delete").is_empty());
+}
+
+#[tokio::test]
 async fn an_upload_removed_while_its_commit_runs_answers_not_found_and_frees_the_object() {
     let rig = rig();
     let api = rig.engine.api();

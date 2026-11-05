@@ -7,7 +7,7 @@
 The `Chat mobile` workflow builds both packages on every push to `main` and on `sc-chat-ffi-v*` tags. Take them from the run of a tag:
 
 ```sh
-gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.1
+gh run list --repo zxcloli666/SoundCloud-Core --workflow chat-mobile.yml --branch sc-chat-ffi-v0.2.2
 gh run download <run id> --repo zxcloli666/SoundCloud-Core
 ```
 
@@ -98,7 +98,7 @@ client.setVisible(visible: true)
 | `REVOKED` | this device was removed, its data is gone: sealed relogin |
 | `OFF` | chat is off for this account |
 | `KEYCHAIN_DENIED` | the user refused the keychain: chat waits, no prompt comes back until `retryKeychain()` |
-| `KEYCHAIN_UNAVAILABLE` | the keychain fails without a refusal: chat retries on its own, up to once a minute; `retryKeychain()` tries at once |
+| `KEYCHAIN_UNAVAILABLE` | the keychain fails without a refusal: chat retries on its own, about 2 s at first, then at most a minute apart; `retryKeychain()` tries as soon as 2 s have passed since the last try |
 
 `history.locked` and `history.unlocksAt`: a new device reads old chats only after an older device confirms it or after 72 h.
 

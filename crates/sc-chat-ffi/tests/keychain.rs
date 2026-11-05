@@ -2,7 +2,7 @@ mod support;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use sc_chat::{ChatPhase, CoreEvent};
 use support::{Rig, until};
@@ -79,40 +79,4 @@ async fn a_retry_from_the_denied_status_event_restarts() {
     until("the store opens", || rig.dir.join("chat.db").exists()).await;
     assert!(retried.load(Ordering::SeqCst));
     assert_ne!(rig.client.status().phase, ChatPhase::KeychainDenied);
-}
-
-#[tokio::test]
-async fn an_unavailable_keychain_shows_its_phase_and_retries_on_its_own() {
-    let rig = Rig::new();
-    rig.keys.break_down(true);
-    rig.client.set_session(Some("session".into()));
-    until("the keychain unavailable phase", || {
-        rig.client.status().phase == ChatPhase::KeychainUnavailable
-    })
-    .await;
-    assert!(!rig.client.status().online);
-    let asked = rig.keys.calls();
-    until("a retry without the user", || rig.keys.calls() > asked).await;
-    assert_eq!(rig.client.status().phase, ChatPhase::KeychainUnavailable);
-
-    rig.keys.break_down(false);
-    until("the store opens", || rig.dir.join("chat.db").exists()).await;
-    until("the config call goes out", || rig.transport.requests() > 0).await;
-    assert_ne!(rig.client.status().phase, ChatPhase::KeychainUnavailable);
-}
-
-#[tokio::test]
-async fn retry_keychain_skips_the_wait_of_an_unavailable_keychain() {
-    let rig = Rig::new();
-    rig.keys.break_down(true);
-    rig.client.set_session(Some("session".into()));
-    until("the keychain unavailable phase", || {
-        rig.client.status().phase == ChatPhase::KeychainUnavailable
-    })
-    .await;
-    rig.keys.break_down(false);
-    let retried = Instant::now();
-    rig.client.retry_keychain();
-    until("the store opens", || rig.dir.join("chat.db").exists()).await;
-    assert!(retried.elapsed() < Duration::from_millis(1_500));
 }

@@ -1,12 +1,15 @@
 use super::local::Local;
 use super::meta_read::MetaRead;
-use super::{SyncEngine, fatal, transient};
+use super::{SyncEngine, fatal, jitter, transient};
 use crate::api::wire::MessageView;
 use crate::contracts::{
-    ChatError, ChatResult, ConvId, ConversationKind, ConversationSummary, MessageClass, Millis,
+    ChatError, ChatResult, ConvId, ConversationKind, ConversationMeta, ConversationSummary,
+    MessageClass, Millis,
 };
 
 pub const ROOM_META_RETRY_MS: Millis = 30_000;
+pub const ROOM_META_RETRY_MAX_MS: Millis = 600_000;
+pub const ROOM_META_ATTEMPTS_MAX: u32 = 5;
 pub const ROOM_META_START_MAX: usize = 32;
 pub const ROOM_META_TICK_MAX: usize = 2;
 
@@ -15,6 +18,7 @@ impl<L: Local> SyncEngine<L> {
         let rooms = self.store.quiet_rooms(ROOM_META_START_MAX)?;
         let now = self.now();
         self.with(|state| {
+            state.room_meta_misses.clear();
             for id in rooms {
                 if !state.room_meta_read.contains(&id) {
                     state.room_meta_due.entry(id).or_insert(now);
@@ -37,21 +41,20 @@ impl<L: Local> SyncEngine<L> {
             due.truncate(ROOM_META_TICK_MAX);
             due
         });
-        let mut read = 0;
+        let mut tried = 0;
         for (_, id) in due {
-            let room = self
-                .store
-                .conversation(id)?
-                .filter(|summary| summary.kind == ConversationKind::Room);
-            let Some(summary) = room else {
+            if !self.is_room(id)? {
                 self.with(|state| state.room_meta_due.remove(&id));
                 continue;
-            };
-            self.refresh_room_meta(id).await?;
-            self.emit_summaries(vec![summary]);
-            read += 1;
+            }
+            tried += 1;
+            if self.refresh_room_meta(id).await?
+                && let Some(summary) = self.store.conversation(id)?
+            {
+                self.emit_summaries(vec![summary]);
+            }
         }
-        Ok(read)
+        Ok(tried)
     }
 
     pub(super) fn note_room_meta(&self, id: ConvId, views: &[MessageView]) -> ChatResult<()> {
@@ -60,7 +63,10 @@ impl<L: Local> SyncEngine<L> {
             .any(|view| view.class == MessageClass::Meta.as_str());
         if carries_meta && self.is_room(id)? {
             let now = self.now();
-            self.with(|state| state.room_meta_due.insert(id, now));
+            self.with(|state| {
+                state.room_meta_misses.remove(&id);
+                state.room_meta_due.insert(id, now);
+            });
         }
         Ok(())
     }
@@ -88,22 +94,32 @@ impl<L: Local> SyncEngine<L> {
         Ok(())
     }
 
-    async fn refresh_room_meta(&self, id: ConvId) -> ChatResult<()> {
+    async fn refresh_room_meta(&self, id: ConvId) -> ChatResult<bool> {
+        let fetched = self.fetch_room_meta(id).await;
         self.with(|state| {
             state.room_meta_due.remove(&id);
             state.room_meta_read.insert(id);
         });
-        let view = match self.api.conversation(id).await {
-            Ok(view) if view.id == id => view,
-            Ok(_) => return self.room_meta_missed(id, ChatError::Protocol),
-            Err(error) => return self.room_meta_missed(id, error),
-        };
+        match fetched {
+            Ok(read) => {
+                self.with(|state| state.room_meta_misses.remove(&id));
+                self.keep_room_meta(id, read)?;
+                Ok(true)
+            }
+            Err(error) => {
+                self.room_meta_missed(id, error)?;
+                Ok(false)
+            }
+        }
+    }
+
+    async fn fetch_room_meta(&self, id: ConvId) -> ChatResult<MetaRead> {
+        let view = self.api.conversation(id).await?;
+        if view.id != id {
+            return Err(ChatError::Protocol);
+        }
         self.note_view(&view);
-        let read = match self.read_meta(&view).await {
-            Ok(read) => read,
-            Err(error) => return self.room_meta_missed(id, error),
-        };
-        self.keep_room_meta(id, read)
+        self.read_meta(&view).await
     }
 
     pub(super) fn keep_room_meta(&self, id: ConvId, read: MetaRead) -> ChatResult<()> {
@@ -114,23 +130,40 @@ impl<L: Local> SyncEngine<L> {
                 _ => state.room_meta_locked.remove(&id),
             }
         });
-        self.store.put_room_meta(id, read.opened().as_ref())
+        let known = match read {
+            MetaRead::Open(meta) => Some(*meta),
+            MetaRead::Absent | MetaRead::Locked(None) => Some(ConversationMeta::default()),
+            MetaRead::Locked(Some(_)) => None,
+        };
+        self.store.put_room_meta(id, known.as_ref())
     }
 
     fn room_meta_missed(&self, id: ConvId, error: ChatError) -> ChatResult<()> {
         if fatal(&error) {
             return Err(error);
         }
-        if transient(&error) {
-            let wait = match error {
-                ChatError::Busy { retry_ms } => i64::try_from(retry_ms).unwrap_or(Millis::MAX),
-                _ => 0,
-            };
-            let at = self.now().saturating_add(wait.max(ROOM_META_RETRY_MS));
-            self.with(|state| {
-                state.room_meta_due.entry(id).or_insert(at);
-            });
+        if !transient(&error) {
+            return Ok(());
         }
+        let asked = match error {
+            ChatError::Busy { retry_ms } => i64::try_from(retry_ms).unwrap_or(Millis::MAX),
+            _ => 0,
+        };
+        let now = self.now();
+        self.with(|state| {
+            let misses = state.room_meta_misses.entry(id).or_insert(0);
+            *misses += 1;
+            if *misses >= ROOM_META_ATTEMPTS_MAX {
+                return;
+            }
+            let backoff = jitter::around(jitter::doubling(
+                *misses,
+                ROOM_META_RETRY_MS.unsigned_abs(),
+                ROOM_META_RETRY_MAX_MS.unsigned_abs(),
+            ));
+            let wait = asked.max(i64::try_from(backoff).unwrap_or(Millis::MAX));
+            state.room_meta_due.insert(id, now.saturating_add(wait));
+        });
         Ok(())
     }
 }

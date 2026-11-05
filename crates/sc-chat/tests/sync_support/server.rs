@@ -17,6 +17,7 @@ pub enum Step {
     Fail(ChatError),
     FailAfter(u64, ChatError),
     Run(Hook, Box<Step>),
+    Stall(Hook),
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +110,7 @@ impl Server {
                 hook();
                 self.play(*then)
             }
+            Step::Stall(_) => Err(ChatError::Internal),
         }
     }
 
@@ -160,6 +162,10 @@ impl Exchange for Server {
             }
             return Err(ChatError::Offline);
         };
+        if let Step::Stall(hook) = step {
+            hook();
+            return std::future::pending().await;
+        }
         self.play(step)
     }
 }
