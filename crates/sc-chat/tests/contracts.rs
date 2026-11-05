@@ -92,6 +92,24 @@ fn server_errors_map_to_codes() {
     assert_eq!(busy.retry_ms(), Some(1500));
     let clock = ChatError::from_server(&json!({"error": "chat_clock", "server_now": 42}));
     assert_eq!(clock, ChatError::Clock { server_now: 42 });
+    let seed = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE";
+    let pow = ChatError::from_server(
+        &json!({"error": "chat_pow_required", "v": 1, "seed": seed, "effort": 40}),
+    );
+    assert_eq!(
+        pow,
+        ChatError::PowRequired {
+            seed: vec![1; 32],
+            effort: 40
+        }
+    );
+    assert_eq!(pow.retry_ms(), None);
+    let short =
+        ChatError::from_server(&json!({"error": "chat_pow_required", "seed": "AQE", "effort": 40}));
+    assert_eq!(short, ChatError::Protocol);
+    let bad =
+        ChatError::from_server(&json!({"error": "chat_pow_required", "seed": "!!", "effort": 40}));
+    assert_eq!(bad, ChatError::Protocol);
     let odd = ChatError::from_server(&json!({"error": "nope"}));
     assert_eq!(odd, ChatError::Protocol);
 }

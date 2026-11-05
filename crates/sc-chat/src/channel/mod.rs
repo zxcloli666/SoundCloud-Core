@@ -15,6 +15,7 @@ pub use answer::{BUSY_RETRY_MAX_MS, BUSY_RETRY_MS, InnerAnswer};
 pub use pins::{DEV_OCK_ENV, dev_pin};
 
 pub const CHANNEL_PATH: &str = "/chat/x";
+pub const AUTH_PATH: &str = "/auth/x";
 
 pub type OckPin = (u8, [u8; 32]);
 
@@ -117,6 +118,7 @@ impl Channel {
             max_bytes,
             bind: None,
             sig: Vec::new(),
+            pow: None,
         }
     }
 

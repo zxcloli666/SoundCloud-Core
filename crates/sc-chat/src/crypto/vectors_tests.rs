@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sc_chat_wire::msg::encode_padded;
 use sc_chat_wire::prost::Message;
-use sc_chat_wire::proto::{Bind, Envelope};
+use sc_chat_wire::proto::{Bind, Envelope, Inner};
 use sc_chat_wire::vectors::{BIND, CK, MSG, REQUEST};
 use serde_json::Value;
 use uuid::Uuid;
@@ -99,8 +99,12 @@ fn sealed_case(case: &Value) -> Sealed {
     let bind = Bind::decode(hex(&inner["bind"]).as_slice()).unwrap();
     let device_id = Uuid::parse_str(&bind.device_id).unwrap();
     assert_eq!(keys.bind(device_id, bind.ts_ms).unwrap(), bind);
-    let session = inner["session_id"].as_str();
-    seal_bound(&channel, &keys, bind, &call, session, tier, ikm_e).unwrap()
+    let extra = Inner {
+        session_id: inner["session_id"].as_str().map(str::to_owned),
+        bind: Some(bind),
+        ..Inner::default()
+    };
+    seal_bound(&channel, &keys, &call, tier, extra, ikm_e).unwrap()
 }
 
 fn recorded_answer(case: &Value) -> InnerAnswer {

@@ -22,6 +22,10 @@ pub enum ChatError {
     Clock {
         server_now: Millis,
     },
+    PowRequired {
+        seed: Vec<u8>,
+        effort: u32,
+    },
     Replay,
     DeviceRevoked,
     ReloginRequired,

@@ -16,6 +16,8 @@ pub enum WireError {
     Signature,
     #[error("the protobuf does not decode")]
     Decode,
+    #[error("the proof of work does not verify")]
+    Pow,
     #[error("the system has no randomness")]
     Random,
 }

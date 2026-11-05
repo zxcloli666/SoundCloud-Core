@@ -1,6 +1,6 @@
 # sc-chat-wire
 
-Wire format and crypto of the SoundCloud chat. The server (Backend `api`, role `rt`) and every client use this crate or follow this file byte for byte. Backend pins it by git tag (`sc-chat-wire-v0.1.1`), the client core `sc-chat` takes it from this workspace. A client that does not use `sc-chat` implements the same steps and must pass every file in `vectors/`.
+Wire format and crypto of the SoundCloud chat. The server (Backend `api`, role `rt`) and every client use this crate or follow this file byte for byte. Backend pins it by git tag (`sc-chat-wire-v0.1.3`), the client core `sc-chat` takes it from this workspace. A client that does not use `sc-chat` implements the same steps and must pass every file in `vectors/`.
 
 All integers inside byte strings are big-endian. `||` is concatenation. `hex()` is lowercase hex. `sha256()` is SHA-256.
 
@@ -49,6 +49,7 @@ v:u8 = 1 | ock_v:u8 | enc[32] | ct
 | `max_bytes` | answer budget the client can take on this tier |
 | `bind` | device keys; required on every sealed auth call, unused on `/chat/...` |
 | `sig` | Ed25519 signature, below |
+| `pow` | proof of work, see Proof of work; not covered by `sig` |
 
 Signature string, signed by the device auth key (by `bind.auth_pub` when there is no device yet):
 
@@ -75,6 +76,40 @@ Session gates:
 - A bound session without a device row reaches only `GET /chat/config`, `GET /chat/devices` and `POST /chat/devices` (register); everything else answers `chat_device_revoked`.
 - `GET /chat/config` answers `user_id`, the caller's own SoundCloud user id. Clients use it for own messages, own read marks and notifications.
 
+## Proof of work
+
+Sealed auth starts can be gated by a proof of work: Equi-X (Arti, `equix` crate) with the Tor onion-service effort rule. `Inner.pow` (field 12):
+
+```
+Pow {v:u32 = 1, seed[32], effort:u32, nonce[16], solution[16]}
+```
+
+`sig` does not cover `pow`; the server checks it on its own, together with the seed, the required effort and one use.
+
+Challenge:
+
+```
+challenge = "scd-pow/v1" || seed[32] || auth_pub[32] || sha256(path)[32] || nonce[16] || effort:u32
+```
+
+`auth_pub` is `bind.auth_pub`, `path` is `Inner.path`. The solution is the 16-byte Equi-X solution (`equix::Solution::to_bytes`) of that challenge.
+
+Effort rule: `R` is the first 4 bytes, big-endian, of `blake2b-512(challenge || solution)`. The solution counts when `R * effort <= 2^32 - 1`, so about `effort` candidate solutions are tried per success. `effort >= 1`.
+
+Verify (`pow::verify`): `v == 1`, exact lengths, `effort >= 1`, Equi-X verify (the interpreted runtime is enough and faster than compile + verify), then the effort rule. Solve (`pow::solve`, feature `solve`): `threads` workers, each with a random 16-byte nonce start that it increments; every nonce is solved with the compiled runtime when it works, with a fallback to the interpreter; the first solution that meets the effort rule wins.
+
+A client that can solve sends the marker `Pow {v: 1}` (empty seed, nonce and solution) while it has no solution. A request with no `pow` at all is a client that cannot solve.
+
+Sealed auth goes to `POST /auth/x` on the api origins (main `api.scnative.dev`, then star `api-star.scnative.dev`); chat stays on `POST /chat/x`.
+
+When a proof is needed the server answers a sealed `InnerResponse` with status 429 and
+
+```
+{"error":"chat_pow_required","v":1,"seed":"<base64url, no padding, 32 bytes>","effort":<u32>}
+```
+
+The client solves for that seed and effort and repeats the request with the proof in `pow`. The known-good vector is in `tests/pow.rs`.
+
 ## Bind
 
 ```
@@ -94,7 +129,7 @@ The server stores the protobuf bytes in `login_requests.chat_bind`, `link_reques
 ## Inner bodies
 
 - JSON. Byte fields are base64, standard alphabet, no padding.
-- Errors are `{"error": "chat_<code>", ...}` with the inner HTTP status: `not_member`, `epoch_stale`, `muted {until}`, `slow_mode {retry_ms}`, `unavailable`, `request_limit`, `send_limited`, `read_limited`, `busy {retry_ms}`, `clock {server_now}`, `replay`, `device_revoked`, `relogin_required`, `session_bound_other`, `too_young`, `disabled`, `send_paused`, `invalid`, `not_found`, `unimplemented`, `internal`.
+- Errors are `{"error": "chat_<code>", ...}` with the inner HTTP status: `not_member`, `epoch_stale`, `muted {until}`, `slow_mode {retry_ms}`, `unavailable`, `request_limit`, `send_limited`, `read_limited`, `busy {retry_ms}`, `clock {server_now}`, `replay`, `pow_required {v, seed, effort}`, `device_revoked`, `relogin_required`, `session_bound_other`, `too_young`, `disabled`, `send_paused`, `invalid`, `not_found`, `unimplemented`, `internal`.
 
 ## Conversation keys (CK)
 
