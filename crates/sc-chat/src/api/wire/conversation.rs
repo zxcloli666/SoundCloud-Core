@@ -24,7 +24,19 @@ pub struct ConversationView {
     pub member_count: i32,
     pub ttl_s: Option<u32>,
     pub room_ref: Option<String>,
+    #[serde(default)]
+    pub pinged: bool,
     pub me: MembershipView,
+}
+
+impl ConversationView {
+    pub fn slow_mode_s(&self) -> u32 {
+        self.settings
+            .get("slow_mode_s")
+            .and_then(Value::as_u64)
+            .and_then(|seconds| u32::try_from(seconds).ok())
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

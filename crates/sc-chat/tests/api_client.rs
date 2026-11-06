@@ -403,10 +403,15 @@ fn a_send_names_media_only_when_there_is_some() {
         target_seq: None,
         body: vec![1],
         media: Vec::new(),
+        pings: Vec::new(),
     };
     assert!(serde_json::to_value(&send).unwrap().get("media").is_none());
+    assert!(serde_json::to_value(&send).unwrap().get("pings").is_none());
 
     let id = Uuid::from_u128(9);
     send.media = vec![id];
     assert_eq!(serde_json::to_value(&send).unwrap()["media"], json!([id]));
+
+    send.pings = vec!["42".into()];
+    assert_eq!(serde_json::to_value(&send).unwrap()["pings"], json!(["42"]));
 }

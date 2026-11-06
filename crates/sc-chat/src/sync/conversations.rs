@@ -104,12 +104,13 @@ impl<L: Local> SyncEngine<L> {
             Some(peer) => Some(self.user_ref(peer).await?),
             None => None,
         };
-        let history_locked = self.with(|state| {
-            state.status.history.locked
-                && state
-                    .device_created_at
-                    .is_some_and(|created| view.created_at < created)
-        });
+        let history_locked = view.kind != ConversationKind::Public
+            && self.with(|state| {
+                state.status.history.locked
+                    && state
+                        .device_created_at
+                        .is_some_and(|created| view.created_at < created)
+            });
         let facts = Facts {
             title: meta
                 .as_ref()

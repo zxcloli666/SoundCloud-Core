@@ -60,6 +60,8 @@ pub fn from_view(
         room_code: view.room_ref.clone(),
         history_locked: facts.history_locked,
         has_draft: existing.is_some_and(|summary| summary.has_draft),
+        pinged: view.pinged,
+        slow_mode_s: view.slow_mode_s(),
     }
 }
 
@@ -87,6 +89,9 @@ pub fn absorb(summary: &mut ConversationSummary, messages: &[Message]) {
 }
 
 pub fn recount(summary: &mut ConversationSummary, unread: &[Message]) {
+    if summary.last_read_seq >= summary.last_seq {
+        summary.pinged = false;
+    }
     let counted: Vec<&Message> = unread
         .iter()
         .filter(|message| message.seq.is_some_and(|seq| seq > summary.last_read_seq))

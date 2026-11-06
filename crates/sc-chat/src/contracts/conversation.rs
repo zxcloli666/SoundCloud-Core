@@ -14,6 +14,9 @@ pub enum ConversationKind {
     Room,
     #[serde(rename = "self")]
     Saved,
+    Public,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +104,10 @@ pub struct ConversationSummary {
     pub room_code: Option<String>,
     pub history_locked: bool,
     pub has_draft: bool,
+    #[serde(default)]
+    pub pinged: bool,
+    #[serde(default)]
+    pub slow_mode_s: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

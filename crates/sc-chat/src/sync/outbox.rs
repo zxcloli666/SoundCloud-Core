@@ -5,13 +5,14 @@ use super::local::Local;
 use super::{SyncEngine, fatal, jitter, summary};
 use crate::api::wire::{SendAnswer, SendMessage};
 use crate::contracts::{
-    ChatError, ChatResult, ClientId, ConvId, CoreEvent, HistoryQuery, Message, MessageClass,
-    MessagesEvent, MessagesOrigin, Seq,
+    ChatError, ChatResult, ClientId, ConvId, ConversationKind, CoreEvent, HistoryQuery, Message,
+    MessageClass, MessagesEvent, MessagesOrigin, Seq,
 };
 use crate::crypto::MessageAt;
 use crate::media::post_media;
 use crate::outbox::OutboxItem;
 
+pub const PINGS_MAX: usize = 5;
 pub const OUTBOX_BATCH: usize = 16;
 pub const OUTBOX_ROUNDS: usize = 8;
 pub const SEND_ATTEMPTS_MAX: u32 = 10;
@@ -78,8 +79,32 @@ impl<L: Local> SyncEngine<L> {
             target_seq: item.target_seq,
             body,
             media,
+            pings: self.pings_of(item, &envelope)?,
         };
         self.api.send(item.conversation_id, &message).await
+    }
+
+    fn pings_of(&self, item: &OutboxItem, envelope: &Envelope) -> ChatResult<Vec<String>> {
+        if item.class != MessageClass::Post {
+            return Ok(Vec::new());
+        }
+        let public = self
+            .store
+            .conversation(item.conversation_id)?
+            .is_some_and(|summary| summary.kind == ConversationKind::Public);
+        if !public {
+            return Ok(Vec::new());
+        }
+        let mut pings: Vec<String> = Vec::new();
+        for id in envelope.mentions.iter().filter(|id| !id.is_empty()) {
+            if pings.len() == PINGS_MAX {
+                break;
+            }
+            if !pings.contains(id) {
+                pings.push(id.clone());
+            }
+        }
+        Ok(pings)
     }
 
     fn after_send(&self, item: &OutboxItem, seq: Seq) -> ChatResult<()> {

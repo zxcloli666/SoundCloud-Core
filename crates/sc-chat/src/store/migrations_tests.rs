@@ -112,3 +112,35 @@ fn a_v1_store_moves_to_v2_and_keeps_its_rows() {
     )
     .unwrap();
 }
+
+#[test]
+fn a_v6_store_takes_public_and_unknown_kinds_and_keeps_its_conversations() {
+    let conn = Connection::open_in_memory().unwrap();
+    prepare(&conn).unwrap();
+    for step in super::STEPS.iter().take(6) {
+        conn.execute_batch(step).unwrap();
+    }
+    conn.pragma_update(None, "user_version", 6).unwrap();
+    conn.execute(
+        "INSERT INTO conversations (id, kind, role, state, last_seq) VALUES (x'01', 'room', 'member', 'active', 9)",
+        [],
+    )
+    .unwrap();
+    migrate(&conn).unwrap();
+    assert_eq!(version(&conn).unwrap(), VERSION);
+    let kept: i64 = conn
+        .query_row(
+            "SELECT last_seq FROM conversations WHERE id = x'01'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(kept, 9);
+    for (id, kind) in [("x'02'", "public"), ("x'03'", "unknown")] {
+        conn.execute(
+            &format!("INSERT INTO conversations (id, kind, role, state) VALUES ({id}, '{kind}', 'member', 'active')"),
+            [],
+        )
+        .unwrap();
+    }
+}
