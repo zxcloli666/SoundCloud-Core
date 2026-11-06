@@ -12,6 +12,12 @@ pub struct RegisterDevice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefreshDevice {
+    pub app_version: String,
+    pub caps: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceView {
     pub id: Uuid,
     pub platform: String,

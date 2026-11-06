@@ -4,6 +4,7 @@ mod devices;
 mod media;
 mod members;
 mod messages;
+mod public;
 mod rooms;
 mod safety;
 mod sync;

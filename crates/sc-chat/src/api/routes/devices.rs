@@ -1,6 +1,6 @@
 use crate::api::Api;
 use crate::api::path::query;
-use crate::api::wire::{ConfigView, DeviceView, RegisterDevice, SealedKey};
+use crate::api::wire::{ConfigView, DeviceView, RefreshDevice, RegisterDevice, SealedKey};
 use crate::contracts::{ChatResult, ConvId, DeviceId};
 
 impl Api {
@@ -10,6 +10,18 @@ impl Api {
 
     pub async fn register_device(&self, body: &RegisterDevice) -> ChatResult<DeviceView> {
         self.post("/chat/devices", body).await
+    }
+
+    pub async fn refresh_device(
+        &self,
+        app_version: &str,
+        caps: &[String],
+    ) -> ChatResult<DeviceView> {
+        let body = RefreshDevice {
+            app_version: app_version.to_owned(),
+            caps: caps.to_vec(),
+        };
+        self.put("/chat/devices/me", &body).await
     }
 
     pub async fn devices(&self) -> ChatResult<Vec<DeviceView>> {

@@ -223,6 +223,8 @@ pub fn summary(id: uuid::Uuid, kind: sc_chat::ConversationKind) -> sc_chat::Conv
         room_code: None,
         history_locked: false,
         has_draft: false,
+        pinged: false,
+        slow_mode_s: 0,
     }
 }
 

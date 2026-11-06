@@ -11,6 +11,8 @@ pub enum ConversationKind {
     Group,
     Room,
     Saved,
+    Public,
+    Unknown,
 }
 
 #[uniffi::remote(Enum)]
@@ -91,6 +93,8 @@ pub struct ConversationSummary {
     pub room_code: Option<String>,
     pub history_locked: bool,
     pub has_draft: bool,
+    pub pinged: bool,
+    pub slow_mode_s: u32,
 }
 
 #[uniffi::remote(Enum)]

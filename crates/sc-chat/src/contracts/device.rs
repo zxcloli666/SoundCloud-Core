@@ -5,6 +5,14 @@ use super::status::Tier;
 
 pub const DEVICE_AGE_RULE_MS: Millis = 72 * 3_600_000;
 pub const DEVICES_MAX: usize = 10;
+pub const CAP_PUBLIC_CHAT: &str = "public_chat";
+
+pub fn caps_with_public_chat(mut caps: Vec<String>) -> Vec<String> {
+    if !caps.iter().any(|cap| cap == CAP_PUBLIC_CHAT) {
+        caps.push(CAP_PUBLIC_CHAT.to_owned());
+    }
+    caps
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

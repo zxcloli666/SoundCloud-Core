@@ -26,6 +26,8 @@ pub struct SendMessage {
     pub body: Vec<u8>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<Uuid>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

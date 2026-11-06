@@ -225,6 +225,8 @@ pub fn summary(id: ConvId, kind: ConversationKind) -> ConversationSummary {
         room_code: None,
         history_locked: false,
         has_draft: false,
+        pinged: false,
+        slow_mode_s: 0,
     }
 }
 

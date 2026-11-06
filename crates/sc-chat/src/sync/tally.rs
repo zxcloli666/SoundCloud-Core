@@ -23,7 +23,10 @@ impl Tally {
         let listed = summary.state == MemberState::Active && summary.notify != NotifyLevel::None;
         let loud = listed
             && summary.notify == NotifyLevel::All
-            && summary.kind != ConversationKind::Room
+            && !matches!(
+                summary.kind,
+                ConversationKind::Room | ConversationKind::Public
+            )
             && summary.muted_until.is_none_or(|until| until <= now);
         let counted = Counted {
             unread: loud && summary.unread > 0,

@@ -94,7 +94,7 @@ impl Chat {
                 platform: setup.platform,
                 name: setup.device_name,
                 app_version: setup.app_version,
-                caps: Vec::new(),
+                caps: vec![sc_chat::CAP_PUBLIC_CHAT.to_owned()],
             },
             clock: Arc::new(SystemClock),
             feed: Arc::new(Feed::new(listener)),

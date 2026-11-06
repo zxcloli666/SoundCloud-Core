@@ -116,5 +116,7 @@ fn seated(id: ConvId, code: &str, from_seq: Seq, now: Millis) -> ConversationSum
         room_code: Some(code.to_owned()),
         history_locked: false,
         has_draft: false,
+        pinged: false,
+        slow_mode_s: 0,
     }
 }

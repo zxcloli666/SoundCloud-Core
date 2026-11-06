@@ -232,6 +232,7 @@ impl Client {
             target_seq: None,
             body: vec![7; 64],
             media: Vec::new(),
+            pings: Vec::new(),
         };
         self.api.send(conversation_id, &message).await
     }

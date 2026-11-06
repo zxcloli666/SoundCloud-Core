@@ -11,6 +11,7 @@ pub mod local;
 mod marks;
 mod meta_read;
 mod outbox;
+mod public;
 mod reconcile;
 mod room_meta;
 mod rooms;

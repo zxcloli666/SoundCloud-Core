@@ -27,6 +27,10 @@ struct Sealed {
     #[serde(default)]
     avatar_media_id: Option<Uuid>,
     preview: Option<MessagePreview>,
+    #[serde(default)]
+    pinged: bool,
+    #[serde(default)]
+    slow_mode_s: u32,
 }
 
 struct Head {
@@ -48,6 +52,8 @@ impl Store {
                 avatar_url: item.avatar_url.clone(),
                 avatar_media_id: item.avatar_media_id,
                 preview: item.preview.clone(),
+                pinged: item.pinged,
+                slow_mode_s: item.slow_mode_s,
             };
             let sealed = seal::seal(&self.keys.body, &aad(item.id), &to_json(&sealed)?)?;
             tx.prepare_cached(UPSERT)?.execute(params![
@@ -208,6 +214,8 @@ fn head(row: &Row<'_>) -> rusqlite::Result<Head> {
             ttl_s: row.get(17)?,
             history_locked: row.get(18)?,
             has_draft: row.get(21)?,
+            pinged: false,
+            slow_mode_s: 0,
             title: None,
             avatar_url: None,
             avatar_media_id: None,
@@ -234,6 +242,8 @@ fn summary(conn: &Connection, keys: &StoreKeys, head: Head) -> ChatResult<Conver
     summary.title = sealed.title;
     summary.avatar_url = sealed.avatar_url;
     summary.avatar_media_id = sealed.avatar_media_id;
+    summary.pinged = sealed.pinged;
+    summary.slow_mode_s = sealed.slow_mode_s;
     summary.peer = match head.peer {
         Some(peer) => people::user(conn, keys, &peer)?,
         None => None,

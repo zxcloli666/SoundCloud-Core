@@ -5,7 +5,7 @@ mod media;
 
 use media::{V3, V4, V5, V6};
 
-pub const VERSION: i64 = 6;
+pub const VERSION: i64 = 7;
 
 const V1: &str = "
 CREATE TABLE meta (
@@ -143,7 +143,43 @@ CREATE TABLE hidden_messages (
 ) WITHOUT ROWID;
 ";
 
-const STEPS: [&str; 6] = [V1, V2, V3, V4, V5, V6];
+const V7: &str = "
+CREATE TABLE conversations_v7 (
+    id BLOB PRIMARY KEY,
+    kind TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+    state TEXT NOT NULL CHECK (state IN ('active', 'invited', 'left', 'kicked', 'banned')),
+    accepted INTEGER NOT NULL DEFAULT 0,
+    member_count INTEGER NOT NULL DEFAULT 0,
+    peer TEXT,
+    room_code TEXT,
+    last_seq INTEGER NOT NULL DEFAULT 0,
+    last_at INTEGER NOT NULL DEFAULT 0,
+    last_read_seq INTEGER NOT NULL DEFAULT 0,
+    hidden_before_seq INTEGER NOT NULL DEFAULT 0,
+    key_epoch INTEGER NOT NULL DEFAULT 0,
+    unread INTEGER NOT NULL DEFAULT 0,
+    mentions INTEGER NOT NULL DEFAULT 0,
+    muted_until INTEGER,
+    notify TEXT NOT NULL DEFAULT 'all' CHECK (notify IN ('all', 'mentions', 'none')),
+    pinned_at INTEGER,
+    archived INTEGER NOT NULL DEFAULT 0,
+    ttl_s INTEGER,
+    history_locked INTEGER NOT NULL DEFAULT 0,
+    meta_epoch INTEGER,
+    meta_nonce BLOB,
+    meta BLOB
+) WITHOUT ROWID;
+
+INSERT INTO conversations_v7 SELECT id, kind, role, state, accepted, member_count, peer, room_code, last_seq, last_at, last_read_seq, hidden_before_seq, key_epoch, unread, mentions, muted_until, notify, pinned_at, archived, ttl_s, history_locked, meta_epoch, meta_nonce, meta FROM conversations;
+
+DROP TABLE conversations;
+ALTER TABLE conversations_v7 RENAME TO conversations;
+
+CREATE INDEX conversations_recent ON conversations (last_at DESC);
+";
+
+const STEPS: [&str; 7] = [V1, V2, V3, V4, V5, V6, V7];
 
 pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "secure_delete", "ON")?;
