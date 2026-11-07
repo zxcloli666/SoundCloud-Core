@@ -4,8 +4,8 @@ use std::sync::Arc;
 use sc_chat::{
     ChatError, ChatResult, ChatStatus, ConvId, ConversationPage, ConversationSummary,
     CreateConversation, Device, DeviceId, HistoryPage, HistoryQuery, LinkClaimed, LinkCreated,
-    LinkMode, LinkPoll, ListQuery, LoginBegin, LoginPoll, LoginTarget, Message, ReportInput,
-    SendInput, Seq, ThreadSnapshot,
+    LinkMode, LinkPoll, ListQuery, LoginBegin, LoginPoll, LoginTarget, Message, PublicOpened,
+    ReportInput, SendInput, Seq, ThreadSnapshot,
 };
 use tokio::runtime::Runtime;
 
@@ -114,6 +114,11 @@ impl ChatClient {
         limit: u32,
     ) -> Result<HistoryPage, ChatError> {
         self.run(|chat| async move { chat.images_before(conversation_id, before, limit).await })
+            .await
+    }
+
+    pub async fn open_public(&self) -> Result<PublicOpened, ChatError> {
+        self.run(|chat| async move { chat.open_public().await })
             .await
     }
 

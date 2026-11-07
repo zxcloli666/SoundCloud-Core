@@ -42,6 +42,7 @@ pub enum ChatError {
     BackdropCooldown {
         until: Millis,
     },
+    BackdropStarRequired,
     MediaUploadsPaused,
     MediaMissing {
         ids: Vec<Uuid>,

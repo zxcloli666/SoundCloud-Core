@@ -1,6 +1,6 @@
 # sc-chat-wire
 
-Wire format and crypto of the SoundCloud chat. The server (Backend `api`, role `rt`) and every client use this crate or follow this file byte for byte. Backend pins it by git tag (`sc-chat-wire-v0.1.3`), the client core `sc-chat` takes it from this workspace. A client that does not use `sc-chat` implements the same steps and must pass every file in `vectors/`.
+Wire format and crypto of the SoundCloud chat. The server (Backend `api`, role `rt`) and every client use this crate or follow this file byte for byte. Backend pins it by git tag (`sc-chat-wire-v0.1.4`), the client core `sc-chat` takes it from this workspace. A client that does not use `sc-chat` implements the same steps and must pass every file in `vectors/`.
 
 All integers inside byte strings are big-endian. `||` is concatenation. `hex()` is lowercase hex. `sha256()` is SHA-256.
 

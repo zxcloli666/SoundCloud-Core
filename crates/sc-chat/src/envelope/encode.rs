@@ -1,5 +1,5 @@
 use sc_chat_wire::msg::ENVELOPE_VERSION;
-use sc_chat_wire::proto::{self, Envelope, envelope::Body};
+use sc_chat_wire::proto::{self, Attachment, Envelope, envelope::Body};
 
 use super::snapshot::{embed_to_wire, meta_to_wire};
 use super::{Content, Post, attachments, text};
@@ -62,17 +62,20 @@ fn post_envelope(post: &Post) -> ChatResult<Envelope> {
 }
 
 fn meta_envelope(meta: &ConversationMeta) -> ChatResult<Envelope> {
-    if meta
+    let images: Vec<Attachment> = meta
         .avatar
-        .as_ref()
-        .is_some_and(|avatar| !attachments::meta_image_ok(avatar))
-    {
+        .iter()
+        .chain(meta.backdrop.iter())
+        .cloned()
+        .collect();
+    let same = images.len() == 2 && images[0].media_id == images[1].media_id;
+    if same || !images.iter().all(attachments::meta_image_ok) {
         return Err(ChatError::Invalid);
     }
     Ok(Envelope {
         v: ENVELOPE_VERSION,
         body: Some(Body::Meta(meta_to_wire(meta))),
-        attachments: meta.avatar.clone().into_iter().collect(),
+        attachments: images,
         ..Envelope::default()
     })
 }

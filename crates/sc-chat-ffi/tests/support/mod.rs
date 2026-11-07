@@ -225,6 +225,7 @@ pub fn summary(id: uuid::Uuid, kind: sc_chat::ConversationKind) -> sc_chat::Conv
         has_draft: false,
         pinged: false,
         slow_mode_s: 0,
+        backdrop: None,
     }
 }
 

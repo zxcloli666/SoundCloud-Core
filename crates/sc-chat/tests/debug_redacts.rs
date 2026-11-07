@@ -78,7 +78,7 @@ fn metas_posts_and_contents_print_no_media_key() {
         ..ConversationMeta::default()
     };
     no_key(&format!("{meta:?}"));
-    no_key(&format!("{:?}", Content::Meta(meta)));
+    no_key(&format!("{:?}", Content::Meta(Box::new(meta))));
     let Content::Post(body) = post() else {
         unreachable!()
     };

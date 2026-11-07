@@ -8,6 +8,7 @@ mod login;
 mod media;
 mod message;
 mod platform;
+mod public;
 mod safety;
 mod status;
 mod storage;

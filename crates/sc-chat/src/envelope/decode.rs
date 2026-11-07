@@ -24,7 +24,10 @@ pub fn decode(envelope: &Envelope) -> ChatResult<Content> {
             emoji: emoji(&reaction.emoji)?,
             on: reaction.on,
         },
-        Body::Meta(meta) => Content::Meta(meta_from_wire(meta.clone(), &envelope.attachments)),
+        Body::Meta(meta) => Content::Meta(Box::new(meta_from_wire(
+            meta.clone(),
+            &envelope.attachments,
+        ))),
         Body::Pin(pin) => Content::Pin {
             target: local_seq(pin.target)?,
             on: pin.on,

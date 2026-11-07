@@ -131,10 +131,11 @@ The QR code is `scd://link?token=<claimToken>&mode=<pull|push>`, the same as on 
 | `createConversation(CreateConversation(kind, members, title))` | `DIRECT` with one user id, or `GROUP` |
 | `setTtl(id, ttlS)` | disappearing messages: `3600`, `86400`, `604800`, `null` turns it off. Expired messages leave the store even offline, as `CoreEvent.Gone` |
 | `report(ReportInput(id, seqFrom, seqTo, reason, comment))` | comment up to 500 chars |
+| `openPublic()` | opens the public chat: `PublicOpened(conversation, online, mute, newcomer)`. `mute` is the caller's moderator mute (`ModeratorMute(until, reason)`), not the notification mute in `me`. `newcomer` (`Newcomer(until, bodyMax)`) is the first 10 minutes after the first post: a post whose padded body is over `bodyMax` bytes is refused with `SendLimited`; `until` is `null` before the first post. `postBodyLen(text)` gives the padded body of a plain text post for a counter |
 
 Keep the list and the open thread in sync with `CoreEvent.Sync` (changed conversations, read marks, request count), `Messages`, `Typing` and `Gone`.
 
-### Images, avatars and room backdrops
+### Images, avatars and backdrops
 
 Core seals every file. The app keeps the sealed bytes in its own files and does the presigned `PUT` and `GET` itself, straight to the given `url` with exactly the given `headers`, never through `ChatTransport`.
 
@@ -143,31 +144,34 @@ Core seals every file. The app keeps the sealed bytes in its own files and does 
 | `mediaConfig()` | `uploads`, `star`, `quota`, `used`, `limits`; no uploads until the first config |
 | `prepareImage(source)` | WebP up to 1600 px, sealed `image` and `thumb`, run off the main thread |
 | `prepareAvatar(source)` | group avatar: 512 px, sealed size up to 64 KiB, no thumb |
-| `prepareBackdrop(source)` | room backdrop: 1920 px, sealed size up to 600 KiB, no thumb, first frame only |
+| `prepareBackdrop(source)` | chat backdrop: 1920 px, sealed size up to 600 KiB, no thumb, first frame only |
 
 `prepare*` answers `PreparedMedia`: the sealed `image` (and `thumb`), `w`, `h`, `thumbhash` (the placeholder) and `seal`, an opaque handle that keeps the key in Core. Write `image` and `thumb` to files, then queue them:
 
-1. `enqueueUpload(NewMediaUpload(album, position, conversationId, imageRef, thumbRef, seal))`: `thumbRef` exactly for an image. A room backdrop takes the room chat id. Answers `MediaUploadRow`.
+1. `enqueueUpload(NewMediaUpload(album, position, conversationId, imageRef, thumbRef, seal))`: `thumbRef` exactly for an image. A backdrop takes the id of the chat it is for (the room chat id for a room). Answers `MediaUploadRow`.
 2. `reserveUpload(id)`: `PutTargets(expiresAt, image, thumb)`. Reserve again after `expiresAt`; the same row keeps its ids.
 3. `PUT` the image file. Report `uploadProgress(id, IMAGE, partsSent, stageId)` while it goes and `uploadObjectDone(id, IMAGE)` after it. An image then sends its thumb the same way (`THUMB`).
 4. `commitUpload(id)`. `MediaMissing` puts the row back on the missing object: `PUT` it again and commit. `NotFound` means the reserve expired: the row is `QUEUED` again. When the row was removed while the commit ran, `NotFound` too, and Core deletes the server copy.
 5. On a network error `uploadFailed(id, retryable = true)` and retry; `retryable = false` ends it as `FAILED`. `uploadRestart(id)` starts a row over, `uploadRedo(id, object)` sends one object again, `removeAlbumUploads(album)` cancels an album and `removeUpload(id)` one row of it (delete the files they answer; `null` when the row is already gone).
 
-`uploads()`, `upload(id)`, `albumUploads(album)` and `nextUpload()` read the queue; it survives app restarts. `CoreEvent.MediaUploads` carries every change, `removed` the cancelled ids. After `sendAlbum`, `setGroupAvatar` or `setRoomBackdrop` answers, the message holds the keys: call `removeAlbumUploads(album)` or `removeUpload(id)` and keep the files only as a cache.
+`uploads()`, `upload(id)`, `albumUploads(album)` and `nextUpload()` read the queue; it survives app restarts. `CoreEvent.MediaUploads` carries every change, `removed` the cancelled ids. After `sendAlbum`, `setGroupAvatar` or `setBackdrop` answers, the message holds the keys: call `removeAlbumUploads(album)` or `removeUpload(id)` and keep the files only as a cache.
 
 | Call | Notes |
 |---|---|
 | `sendAlbum(SendInput, album)` | posts the album once every upload of it is `COMMITTED` (`NotReady` before); up to 10 images, 4 in a room. `Invalid` for a `FAILED` row, a non-image row or a row of another chat |
 | `setGroupAvatar(id, AvatarChange.Set(uploadId))` | a committed avatar upload of this group; `Clear` drops it. Rides a meta message |
-| `setRoomBackdrop(roomChatId, BackdropChange.Set(uploadId))` | host only, STAR: sets the room settings, then queues the room meta with the key. `Clear` removes it. `Invalid` for a chat that is not a room, `NotFound` when its room code is not known yet. `BackdropCooldown(until)`: an image was taken down by reports, no new image until then |
-| `setRoomPreset(roomChatId, presetId)` | a bundled preset; also queues a room meta without the image. `null` when the known room meta has no image |
-| `reportBackdrop(BackdropReport(conversationId, mediaId, reason, comment))` | a member reports the room backdrop on screen, never the host; comment up to 500 chars. `MediaMissing` means the room shows another backdrop now |
-| `mediaInfo(conversationId, mediaId)` | size, `w`, `h`, `thumbhash` and the thumb id of an album image, a group avatar or a room backdrop |
+| `setBackdrop(conversationId, BackdropChange.Set(uploadId))` | any chat: a direct chat (either member), a group (owner or admin), Saved, the public chat (owner or moderators) or a room (host). Sets the backdrop on the server, then queues the meta message with the key: a group meta keeps the avatar, other kinds carry the backdrop alone. `Clear` removes it; a cleared room or group meta is queued only while the known meta still holds an image, other kinds queue nothing. Answers the queued meta or `null`. `BackdropStarRequired` without STAR (presets in the public chat need none), `NotMember` without the role, `Unavailable` for a direct chat whose peer is not active, `RequestLimit` after 6 changes per chat in 10 min, `BackdropCooldown(until)` in a room whose image was taken down by reports |
+| `setBackdropPreset(conversationId, presetId)` | a bundled preset for any chat; the same meta rule as `Clear` |
+| `setRoomBackdrop(roomChatId, change)`, `setRoomPreset(roomChatId, presetId)` | the same for a room only; `Invalid` for another kind, `NotFound` when its room code is not known yet |
+| `reportBackdrop(BackdropReport(conversationId, mediaId, reason, comment))` | a member reports the backdrop on screen in any chat, never its setter; comment up to 500 chars. `MediaMissing` means the chat shows another backdrop now |
+| `mediaInfo(conversationId, mediaId)` | size, `w`, `h`, `thumbhash` and the thumb id of an album image, a group avatar or a backdrop |
 | `mediaUrls(conversationId, ids)` | presigned `GET` urls, 15 min; `DELETED` shows "Картинка удалена", `LOST` "Картинка недоступна" |
 | `openImage(conversationId, mediaId, ciphertext)` | checks and decrypts the downloaded bytes: `OpenedMedia(bytes, mime, w, h)`, JPEG or PNG |
 | `openThumb(conversationId, mediaId, ciphertext)` | the same for the thumb of an image (`mediaId` is the image id) |
 | `mediaUsage()`, `mediaMine(MineQuery)` | storage: quota, per chat, own files |
 | `deleteMedia(MediaSelection)`, `restoreMedia(MediaSelection)` | delete for everyone in every chat; restore within 15 s |
+
+`ConversationSummary.backdrop` names the backdrop of a direct chat, a group, Saved or the public chat: `ConversationBackdrop(look, by)`, `look` a `RoomBackdrop.Preset(id)` or `RoomBackdrop.Image(mediaId)`, `by` the user who set it; `null` when there is none or the setter lost STAR. Resolve an image with `mediaInfo(conversationId, mediaId)` as for a room; `null` means the meta with the key has not arrived yet. Old servers and unknown kinds read as `null`.
 
 The room view (`backdrop` in the room state) decides what to draw. For `{"kind": "image", "mediaId"}` resolve it with `mediaInfo(roomChatId, mediaId)`, fetch it with `mediaUrls(roomChatId, [mediaId])` and open it with `openImage`; `null` from `mediaInfo` means the key has not arrived: draw the cover. The server can drop a backdrop without a new room meta, so draw only what the room state names; a room summary never carries `avatarMediaId`. When Core reads a new room meta, `CoreEvent.Sync` brings the room summary: resolve again then. A 404 on a `GET` asks `mediaUrls` once more, then shows the placeholder.
 

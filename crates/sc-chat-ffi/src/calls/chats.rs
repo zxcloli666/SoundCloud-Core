@@ -74,10 +74,10 @@ impl Chat {
         if let (ConversationKind::Group, Some(title)) = (input.kind, title) {
             let meta = ConversationMeta {
                 title,
-                description: String::new(),
-                avatar: None,
+                ..ConversationMeta::default()
             };
-            self.queue(view.id, None, Content::Meta(meta)).await?;
+            self.queue(view.id, None, Content::Meta(Box::new(meta)))
+                .await?;
         }
         Ok(summary)
     }

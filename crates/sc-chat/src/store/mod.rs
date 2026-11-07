@@ -45,6 +45,7 @@ use crate::contracts::{
 };
 
 pub use crate::contracts::{UploadObject, UploadState};
+pub use backdrop::backdrop_slot;
 pub use expiry::ExpiryTimer;
 pub use media_rows::{MediaUpload, NewUpload, Reserved};
 pub use orphan::{ORPHANS_KEPT, remove_database, remove_orphans};

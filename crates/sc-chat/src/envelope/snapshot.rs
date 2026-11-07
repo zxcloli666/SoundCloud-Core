@@ -42,22 +42,28 @@ pub fn meta_to_wire(meta: &ConversationMeta) -> proto::Meta {
     proto::Meta {
         title: meta.title.clone(),
         description: meta.description.clone(),
-        avatar_media_id: meta
-            .avatar
-            .as_ref()
-            .map(|avatar| avatar.media_id.clone())
-            .unwrap_or_default(),
+        avatar_media_id: media_id(meta.avatar.as_ref()),
+        backdrop_media_id: media_id(meta.backdrop.as_ref()),
     }
 }
 
 pub fn meta_from_wire(meta: proto::Meta, attachments: &[proto::Attachment]) -> ConversationMeta {
     let avatar =
         filled(meta.avatar_media_id).and_then(|id| attachments::meta_image(attachments, &id));
+    let backdrop =
+        filled(meta.backdrop_media_id).and_then(|id| attachments::meta_image(attachments, &id));
     ConversationMeta {
         title: meta.title,
         description: meta.description,
         avatar,
+        backdrop,
     }
+}
+
+fn media_id(attachment: Option<&proto::Attachment>) -> String {
+    attachment
+        .map(|attachment| attachment.media_id.clone())
+        .unwrap_or_default()
 }
 
 fn track_to_wire(track: &EmbedTrack) -> proto::EmbedTrack {

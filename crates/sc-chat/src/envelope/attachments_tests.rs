@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{Content, Post, decode, encode};
 use crate::contracts::{ChatError, ConversationMeta, RichText};
-use crate::media::{ALBUM_MAX, BACKDROP_SERVER_CAP};
+use crate::media::{ALBUM_MAX, BACKDROP_SERVER_CAP, post_media};
 
 fn image(n: u128) -> Attachment {
     Attachment {
@@ -109,16 +109,17 @@ fn a_group_avatar_rides_the_meta_envelope() {
         title: "Ночная смена".into(),
         description: String::new(),
         avatar: Some(avatar(5)),
+        backdrop: None,
     };
-    let envelope = encode(&Content::Meta(meta.clone())).unwrap();
+    let envelope = encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
     let Some(Body::Meta(wire)) = &envelope.body else {
         panic!("meta encodes as a meta body");
     };
     assert_eq!(wire.avatar_media_id, Uuid::from_u128(5).to_string());
     assert_eq!(envelope.attachments, vec![avatar(5)]);
     assert_eq!(
-        round_trip(&Content::Meta(meta.clone())),
-        Content::Meta(meta)
+        round_trip(&Content::Meta(Box::new(meta.clone()))),
+        Content::Meta(Box::new(meta))
     );
 }
 
@@ -132,12 +133,13 @@ fn a_room_backdrop_up_to_its_cap_rides_the_meta_envelope() {
         title: String::new(),
         description: String::new(),
         avatar: Some(backdrop.clone()),
+        backdrop: None,
     };
-    let envelope = encode(&Content::Meta(meta.clone())).unwrap();
+    let envelope = encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
     assert_eq!(envelope.attachments, vec![backdrop]);
     assert_eq!(
-        round_trip(&Content::Meta(meta.clone())),
-        Content::Meta(meta)
+        round_trip(&Content::Meta(Box::new(meta.clone()))),
+        Content::Meta(Box::new(meta))
     );
 }
 
@@ -150,8 +152,12 @@ fn a_meta_image_with_a_thumb_or_too_big_is_refused() {
             title: "t".into(),
             description: String::new(),
             avatar: Some(bad),
+            backdrop: None,
         };
-        assert_eq!(encode(&Content::Meta(meta)).err(), Some(ChatError::Invalid));
+        assert_eq!(
+            encode(&Content::Meta(Box::new(meta))).err(),
+            Some(ChatError::Invalid)
+        );
     }
 }
 
@@ -163,6 +169,7 @@ fn a_meta_avatar_id_without_its_attachment_reads_as_no_avatar() {
             title: "t".into(),
             description: String::new(),
             avatar_media_id: Uuid::from_u128(5).to_string(),
+            backdrop_media_id: String::new(),
         })),
         attachments: vec![avatar(6), image(5)],
         ..Envelope::default()
@@ -171,4 +178,91 @@ fn a_meta_avatar_id_without_its_attachment_reads_as_no_avatar() {
         panic!("a meta body decodes as meta");
     };
     assert_eq!(meta.avatar, None);
+}
+
+#[test]
+fn a_group_meta_carries_its_avatar_and_its_backdrop_as_two_attachments() {
+    let mut backdrop = avatar(6);
+    backdrop.size = BACKDROP_SERVER_CAP as u64;
+    let meta = ConversationMeta {
+        title: "t".into(),
+        description: String::new(),
+        avatar: Some(avatar(5)),
+        backdrop: Some(backdrop.clone()),
+    };
+    let envelope = encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
+    let Some(Body::Meta(wire)) = &envelope.body else {
+        panic!("a meta body");
+    };
+    assert_eq!(wire.avatar_media_id, Uuid::from_u128(5).to_string());
+    assert_eq!(wire.backdrop_media_id, Uuid::from_u128(6).to_string());
+    assert_eq!(envelope.attachments, vec![avatar(5), backdrop]);
+    assert_eq!(
+        post_media(&envelope.attachments).unwrap(),
+        vec![Uuid::from_u128(5), Uuid::from_u128(6)]
+    );
+    assert_eq!(
+        round_trip(&Content::Meta(Box::new(meta.clone()))),
+        Content::Meta(Box::new(meta))
+    );
+}
+
+#[test]
+fn a_backdrop_only_meta_names_no_avatar() {
+    let meta = ConversationMeta {
+        backdrop: Some(avatar(6)),
+        ..ConversationMeta::default()
+    };
+    let envelope = encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
+    let Some(Body::Meta(wire)) = &envelope.body else {
+        panic!("a meta body");
+    };
+    assert_eq!(wire.avatar_media_id, "");
+    assert_eq!(envelope.attachments, vec![avatar(6)]);
+    assert_eq!(
+        round_trip(&Content::Meta(Box::new(meta.clone()))),
+        Content::Meta(Box::new(meta))
+    );
+}
+
+#[test]
+fn a_meta_refuses_one_image_in_both_slots_or_an_oversized_backdrop() {
+    let twice = ConversationMeta {
+        avatar: Some(avatar(5)),
+        backdrop: Some(avatar(5)),
+        ..ConversationMeta::default()
+    };
+    assert_eq!(
+        encode(&Content::Meta(Box::new(twice))).err(),
+        Some(ChatError::Invalid)
+    );
+    let mut big = avatar(6);
+    big.size = BACKDROP_SERVER_CAP as u64 + 1;
+    let oversized = ConversationMeta {
+        backdrop: Some(big),
+        ..ConversationMeta::default()
+    };
+    assert_eq!(
+        encode(&Content::Meta(Box::new(oversized))).err(),
+        Some(ChatError::Invalid)
+    );
+}
+
+#[test]
+fn a_meta_backdrop_id_without_its_attachment_reads_as_no_backdrop() {
+    let envelope = Envelope {
+        v: 1,
+        body: Some(Body::Meta(proto::Meta {
+            title: String::new(),
+            description: String::new(),
+            avatar_media_id: Uuid::from_u128(5).to_string(),
+            backdrop_media_id: Uuid::from_u128(6).to_string(),
+        })),
+        attachments: vec![avatar(5), image(6)],
+        ..Envelope::default()
+    };
+    let Content::Meta(meta) = decode(&envelope).unwrap() else {
+        panic!("a meta");
+    };
+    assert_eq!((meta.avatar, meta.backdrop), (Some(avatar(5)), None));
 }

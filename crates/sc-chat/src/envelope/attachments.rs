@@ -50,6 +50,7 @@ pub fn group_meta(mut meta: ConversationMeta) -> ConversationMeta {
     meta.avatar = meta
         .avatar
         .filter(|avatar| sealed_ok(avatar, AVATAR_SERVER_CAP));
+    meta.backdrop = meta.backdrop.filter(meta_image_ok);
     meta
 }
 

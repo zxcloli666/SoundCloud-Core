@@ -182,5 +182,6 @@ pub fn summary(id: ConvId, last_seq: i64) -> ConversationSummary {
         has_draft: false,
         pinged: false,
         slow_mode_s: 0,
+        backdrop: None,
     }
 }

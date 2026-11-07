@@ -144,3 +144,33 @@ fn a_v6_store_takes_public_and_unknown_kinds_and_keeps_its_conversations() {
         .unwrap();
     }
 }
+
+#[test]
+fn a_v7_store_gives_group_metas_a_backdrop_id_and_keeps_their_rows() {
+    let conn = Connection::open_in_memory().unwrap();
+    prepare(&conn).unwrap();
+    for step in super::STEPS.iter().take(7) {
+        conn.execute_batch(step).unwrap();
+    }
+    conn.pragma_update(None, "user_version", 7).unwrap();
+    conn.execute(
+        "INSERT INTO group_meta (conversation_id, avatar_id, nonce, body) VALUES (x'01', x'10', x'02', x'03')",
+        [],
+    )
+    .unwrap();
+    migrate(&conn).unwrap();
+    assert_eq!(version(&conn).unwrap(), VERSION);
+    let (avatar, backdrop): (Vec<u8>, Option<Vec<u8>>) = conn
+        .query_row(
+            "SELECT avatar_id, backdrop_id FROM group_meta WHERE conversation_id = x'01'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((avatar, backdrop), (vec![0x10], None));
+    conn.execute(
+        "INSERT INTO group_meta (conversation_id, avatar_id, backdrop_id, nonce, body) VALUES (x'02', NULL, x'61', x'02', x'03')",
+        [],
+    )
+    .unwrap();
+}

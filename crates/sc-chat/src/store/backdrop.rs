@@ -9,30 +9,50 @@ use crate::contracts::{
 impl Store {
     pub fn backdrop_meta(
         &self,
-        room: ConvId,
+        id: ConvId,
         change: &BackdropChange,
     ) -> ChatResult<ConversationMeta> {
-        if self.not_a_room(room)? {
-            return Err(ChatError::Invalid);
-        }
-        let avatar = match change {
+        let summary = self.conversation(id)?.ok_or(ChatError::Invalid)?;
+        let image = match change {
             BackdropChange::Clear => None,
             BackdropChange::Set { upload_id } => {
-                Some(self.committed_upload(room, *upload_id, MediaKind::Backdrop)?)
+                Some(self.committed_upload(id, *upload_id, MediaKind::Backdrop)?)
             }
         };
-        Ok(ConversationMeta {
-            title: String::new(),
-            description: String::new(),
-            avatar,
+        Ok(match summary.kind {
+            ConversationKind::Room => ConversationMeta {
+                avatar: image,
+                ..ConversationMeta::default()
+            },
+            ConversationKind::Group => ConversationMeta {
+                backdrop: image,
+                ..self.known_meta(id, summary.title)?
+            },
+            ConversationKind::Direct | ConversationKind::Saved | ConversationKind::Public => {
+                ConversationMeta {
+                    backdrop: image,
+                    ..ConversationMeta::default()
+                }
+            }
+            ConversationKind::Unknown => return Err(ChatError::Invalid),
         })
     }
 
+    pub fn backdrop_image(&self, id: ConvId) -> ChatResult<Option<Attachment>> {
+        let Some(summary) = self.conversation(id)? else {
+            return Ok(None);
+        };
+        let Some(meta) = self.group_meta(id)? else {
+            return Ok(None);
+        };
+        Ok(backdrop_slot(summary.kind, meta))
+    }
+
     pub fn room_backdrop(&self, room: ConvId) -> ChatResult<Option<Attachment>> {
-        if self.not_a_room(room)? {
+        if !self.is_room(room)? {
             return Ok(None);
         }
-        Ok(self.group_meta(room)?.and_then(|meta| meta.avatar))
+        self.backdrop_image(room)
     }
 
     pub fn put_room_meta(&self, room: ConvId, meta: Option<&ConversationMeta>) -> ChatResult<()> {
@@ -51,9 +71,16 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    fn not_a_room(&self, id: ConvId) -> ChatResult<bool> {
-        Ok(!self
+    fn is_room(&self, id: ConvId) -> ChatResult<bool> {
+        Ok(self
             .conversation(id)?
             .is_some_and(|summary| summary.kind == ConversationKind::Room))
+    }
+}
+
+pub fn backdrop_slot(kind: ConversationKind, meta: ConversationMeta) -> Option<Attachment> {
+    match kind {
+        ConversationKind::Room => meta.avatar,
+        _ => meta.backdrop,
     }
 }

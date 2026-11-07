@@ -3,6 +3,7 @@ pub mod b64;
 mod config;
 mod conversation;
 mod device;
+pub mod known;
 mod media;
 mod member;
 mod message;

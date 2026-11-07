@@ -227,6 +227,7 @@ pub fn summary(id: ConvId, kind: ConversationKind) -> ConversationSummary {
         has_draft: false,
         pinged: false,
         slow_mode_s: 0,
+        backdrop: None,
     }
 }
 
@@ -315,4 +316,34 @@ impl Events for Recorded {
     fn emit(&self, event: CoreEvent) {
         self.0.lock().unwrap().push(event);
     }
+}
+
+pub fn committed_backdrop(store: &Store, conversation_id: ConvId, media: u128) -> Uuid {
+    let upload = sc_chat::store::NewUpload {
+        album: Uuid::new_v4(),
+        position: 0,
+        conversation_id,
+        kind: sc_chat::MediaKind::Backdrop,
+        image_ref: "media/backdrop.img".into(),
+        thumb_ref: None,
+        attachment: avatar(0),
+    };
+    let upload_id = store.enqueue_upload(&upload, 1).unwrap();
+    let reserved = sc_chat::store::Reserved {
+        media_id: Uuid::from_u128(media),
+        thumb_media_id: None,
+        presign_expires_at: 100,
+    };
+    store.upload_reserved(upload_id, &reserved, 2).unwrap();
+    store
+        .upload_object_done(upload_id, sc_chat::store::UploadObject::Image, 3)
+        .unwrap();
+    store.upload_committed(upload_id, 4).unwrap();
+    upload_id
+}
+
+pub fn backdrop(n: u128) -> proto::Attachment {
+    let mut attachment = avatar(0);
+    attachment.media_id = Uuid::from_u128(n).to_string();
+    attachment
 }

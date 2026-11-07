@@ -5,6 +5,7 @@ use uuid::Uuid;
 use super::ids::{ConvId, Millis, Seq, UserId};
 use super::media::AvatarChange;
 use super::message::{Message, PeerMark, RichText};
+use super::room::RoomBackdrop;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,6 +109,15 @@ pub struct ConversationSummary {
     pub pinged: bool,
     #[serde(default)]
     pub slow_mode_s: u32,
+    #[serde(default)]
+    pub backdrop: Option<ConversationBackdrop>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConversationBackdrop {
+    #[serde(flatten)]
+    pub look: RoomBackdrop,
+    pub by: UserId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +159,7 @@ pub struct ConversationMeta {
     pub title: String,
     pub description: String,
     pub avatar: Option<Attachment>,
+    pub backdrop: Option<Attachment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

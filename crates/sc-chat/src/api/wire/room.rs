@@ -1,6 +1,7 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::known::known;
 use crate::contracts::{Embed, EmbedKind, RoomBackdrop, RoomCover, RoomPreview, UserRef};
 use crate::embeds::validate;
 
@@ -27,7 +28,7 @@ pub struct RoomPreviewView {
     pub star_host: bool,
     #[serde(default)]
     pub cover: Option<RoomCover>,
-    #[serde(default, deserialize_with = "known_backdrop")]
+    #[serde(default, deserialize_with = "known")]
     pub backdrop: Option<RoomBackdrop>,
 }
 
@@ -94,14 +95,6 @@ impl From<&RoomPreviewView> for RoomPreview {
             alive: view.alive,
         }
     }
-}
-
-fn known_backdrop<'de, D>(deserializer: D) -> Result<Option<RoomBackdrop>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(raw.and_then(|raw| serde_json::from_value(raw).ok()))
 }
 
 fn track_card(track: &PreviewTrack) -> Option<Embed> {

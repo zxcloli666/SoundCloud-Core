@@ -19,3 +19,8 @@ uniffi::setup_scaffolding!();
 pub fn chat_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
+
+#[uniffi::export]
+pub fn post_body_len(text: String) -> u32 {
+    u32::try_from(sc_chat::envelope::post_body_len(&text)).unwrap_or(u32::MAX)
+}

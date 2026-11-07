@@ -17,7 +17,7 @@ impl Store {
         let conn = self.conn()?;
         match in_messages(&conn, &self.keys, conversation_id, media_id)? {
             Some(found) => Ok(Some(found)),
-            None => group_meta::avatar(&conn, &self.keys, conversation_id, media_id),
+            None => group_meta::image(&conn, &self.keys, conversation_id, media_id),
         }
     }
 }

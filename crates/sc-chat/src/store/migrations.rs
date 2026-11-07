@@ -5,7 +5,7 @@ mod media;
 
 use media::{V3, V4, V5, V6};
 
-pub const VERSION: i64 = 7;
+pub const VERSION: i64 = 8;
 
 const V1: &str = "
 CREATE TABLE meta (
@@ -179,7 +179,11 @@ ALTER TABLE conversations_v7 RENAME TO conversations;
 CREATE INDEX conversations_recent ON conversations (last_at DESC);
 ";
 
-const STEPS: [&str; 7] = [V1, V2, V3, V4, V5, V6, V7];
+const V8: &str = "
+ALTER TABLE group_meta ADD COLUMN backdrop_id BLOB;
+";
+
+const STEPS: [&str; 8] = [V1, V2, V3, V4, V5, V6, V7, V8];
 
 pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "secure_delete", "ON")?;

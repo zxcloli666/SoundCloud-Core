@@ -37,7 +37,7 @@ pub fn room_view(meta: Option<&ConversationMeta>, epoch: u32) -> Value {
     view["kind"] = json!("room");
     view["peer"] = Value::Null;
     if let Some(meta) = meta {
-        let envelope = envelope::encode(&Content::Meta(meta.clone())).unwrap();
+        let envelope = envelope::encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
         let meta_ct = crypto::seal_meta(&Ck::from_bytes(CK), R, epoch, &envelope).unwrap();
         view["meta_ct"] = json!(b64::encode(&meta_ct));
         view["meta_epoch"] = json!(epoch);
@@ -54,7 +54,7 @@ pub fn meta_message(seq: i64, meta: &ConversationMeta) -> Value {
         client_id,
         class: MessageClass::Meta,
     };
-    let envelope = envelope::encode(&Content::Meta(meta.clone())).unwrap();
+    let envelope = envelope::encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
     let sealed = crypto::seal_message(&Ck::from_bytes(CK), &at, &envelope).unwrap();
     json!({
         "seq": seq,
