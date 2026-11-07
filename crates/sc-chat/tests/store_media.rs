@@ -118,6 +118,7 @@ fn a_gone_conversation_takes_its_album_keys_and_avatar() {
         title: "Group".into(),
         description: String::new(),
         avatar: Some(avatar(9)),
+        backdrop: None,
     };
     store.put_group_meta(id, &meta).unwrap();
 
@@ -139,6 +140,7 @@ fn the_group_avatar_resolves_only_while_it_is_current() {
         title: "Group".into(),
         description: "d".into(),
         avatar: Some(avatar(9)),
+        backdrop: None,
     };
     store.put_group_meta(id, &meta).unwrap();
     assert_eq!(store.group_meta(id).unwrap(), Some(meta.clone()));
@@ -173,6 +175,7 @@ fn next_meta_keeps_sets_and_clears_the_avatar() {
             title: "Ночная смена".into(),
             description: String::new(),
             avatar: None,
+            backdrop: None,
         }
     );
 

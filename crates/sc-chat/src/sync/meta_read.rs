@@ -34,7 +34,7 @@ impl<L: Local> SyncEngine<L> {
             return Ok(MetaRead::Locked(None));
         };
         Ok(match envelope::decode(&envelope) {
-            Ok(Content::Meta(meta)) => MetaRead::Open(Box::new(meta)),
+            Ok(Content::Meta(meta)) => MetaRead::Open(meta),
             _ => MetaRead::Locked(None),
         })
     }

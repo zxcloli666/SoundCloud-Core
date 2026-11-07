@@ -6,8 +6,8 @@ use super::codec::{Label, from_json, label, to_json, uuid_at};
 use super::project::Context;
 use super::{Store, StoreKeys, history, meta, people, seal};
 use crate::contracts::{
-    ChatResult, ConvId, ConversationPage, ConversationSummary, ListFilter, ListQuery, Message,
-    MessageBody, MessagePreview, PreviewKind, Seq, SystemKind,
+    ChatResult, ConvId, ConversationBackdrop, ConversationPage, ConversationSummary, ListFilter,
+    ListQuery, Message, MessageBody, MessagePreview, PreviewKind, Seq, SystemKind,
 };
 
 const PAGE_DEFAULT: u32 = 50;
@@ -31,6 +31,8 @@ struct Sealed {
     pinged: bool,
     #[serde(default)]
     slow_mode_s: u32,
+    #[serde(default)]
+    backdrop: Option<ConversationBackdrop>,
 }
 
 struct Head {
@@ -54,6 +56,7 @@ impl Store {
                 preview: item.preview.clone(),
                 pinged: item.pinged,
                 slow_mode_s: item.slow_mode_s,
+                backdrop: item.backdrop.clone(),
             };
             let sealed = seal::seal(&self.keys.body, &aad(item.id), &to_json(&sealed)?)?;
             tx.prepare_cached(UPSERT)?.execute(params![
@@ -216,6 +219,7 @@ fn head(row: &Row<'_>) -> rusqlite::Result<Head> {
             has_draft: row.get(21)?,
             pinged: false,
             slow_mode_s: 0,
+            backdrop: None,
             title: None,
             avatar_url: None,
             avatar_media_id: None,
@@ -244,6 +248,7 @@ fn summary(conn: &Connection, keys: &StoreKeys, head: Head) -> ChatResult<Conver
     summary.avatar_media_id = sealed.avatar_media_id;
     summary.pinged = sealed.pinged;
     summary.slow_mode_s = sealed.slow_mode_s;
+    summary.backdrop = sealed.backdrop;
     summary.peer = match head.peer {
         Some(peer) => people::user(conn, keys, &peer)?,
         None => None,

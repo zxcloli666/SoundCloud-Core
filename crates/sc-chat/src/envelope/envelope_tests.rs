@@ -115,11 +115,12 @@ fn every_kind_of_content_survives_a_round_trip() {
             emoji: "👍🏽".into(),
             on: false,
         },
-        Content::Meta(ConversationMeta {
+        Content::Meta(Box::new(ConversationMeta {
             title: "Ночная смена".into(),
             description: String::new(),
             avatar: None,
-        }),
+            backdrop: None,
+        })),
         Content::Pin {
             target: 6,
             on: true,
@@ -409,11 +410,12 @@ fn a_body_moved_to_another_class_by_its_sender_is_refused() {
 #[test]
 fn a_meta_message_opens_as_the_conversation_meta() {
     let ck = Ck::from_bytes([9; 32]);
-    let meta = Content::Meta(ConversationMeta {
+    let meta = Content::Meta(Box::new(ConversationMeta {
         title: "Ночная смена".into(),
         description: "треки после полуночи".into(),
         avatar: None,
-    });
+        backdrop: None,
+    }));
     let meta_at = at(MessageClass::Meta);
     let body = seal(&ck, &meta_at, &meta).unwrap();
     let stored = open_meta(&ck, meta_at.conversation_id, meta_at.epoch, &body).unwrap();

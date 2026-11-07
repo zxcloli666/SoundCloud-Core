@@ -1,9 +1,13 @@
 mod sync_support;
 
 use sc_chat::api::wire::{ConversationList, LogPage, PublicView};
+use sc_chat::envelope::post_body_len;
 use sc_chat::outbox::{Outbox, OutboxItem};
 use sc_chat::sc_chat_wire::prost::Message as _;
-use sc_chat::{CAP_PUBLIC_CHAT, ChatError, ConversationKind, MessageClass, caps_with_public_chat};
+use sc_chat::{
+    CAP_PUBLIC_CHAT, ChatError, ConversationKind, MessageClass, ModeratorMute, Newcomer,
+    caps_with_public_chat,
+};
 use serde_json::json;
 use sync_support::fixtures::{summary, text, view};
 use sync_support::real::real;
@@ -82,9 +86,11 @@ async fn opening_the_public_chat_keeps_online_pings_and_slow_mode() {
         json!({"conversation": public_view(Some(true)), "online": 41}),
     );
 
-    let (summary, online) = rig.engine.open_public().await.unwrap();
+    let opened = rig.engine.open_public().await.unwrap();
+    let summary = opened.conversation;
 
-    assert_eq!(online, 41);
+    assert_eq!(opened.online, 41);
+    assert_eq!((opened.mute, opened.newcomer), (None, None));
     assert_eq!(summary.kind, ConversationKind::Public);
     assert!(summary.pinged);
     assert_eq!(summary.slow_mode_s, 30);
@@ -288,4 +294,75 @@ async fn a_public_post_names_its_mentions_as_pings_and_other_chats_do_not() {
         .server
         .calls_to("POST", &format!("/chat/conversations/{other}/messages"));
     assert!(plain[0].body.get("pings").is_none());
+}
+
+#[tokio::test]
+async fn opening_the_public_chat_carries_the_moderator_mute_and_the_newcomer_window() {
+    let rig = real(&[]);
+    rig.server.json(
+        "POST",
+        "/chat/public/open",
+        json!({
+            "conversation": public_view(None),
+            "online": 3,
+            "mute": {"until": START_MS + 600_000, "reason": "spam"},
+            "newcomer": {"until": null, "body_max": 512},
+        }),
+    );
+    rig.server.json(
+        "POST",
+        "/chat/public/open",
+        json!({
+            "conversation": public_view(None),
+            "online": 4,
+            "mute": null,
+            "newcomer": {"until": START_MS + 300_000, "body_max": 512},
+        }),
+    );
+
+    let opened = rig.engine.open_public().await.unwrap();
+    assert_eq!(
+        opened.mute,
+        Some(ModeratorMute {
+            until: START_MS + 600_000,
+            reason: Some("spam".into()),
+        })
+    );
+    assert_eq!(
+        opened.newcomer,
+        Some(Newcomer {
+            until: None,
+            body_max: 512,
+        })
+    );
+    let again = rig.engine.open_public().await.unwrap();
+    assert_eq!(again.mute, None);
+    assert_eq!(again.newcomer.unwrap().until, Some(START_MS + 300_000));
+
+    let parsed: PublicView = serde_json::from_value(json!({
+        "conversation": public_view(None),
+        "online": 1,
+        "mute": {"until": 5},
+    }))
+    .unwrap();
+    assert_eq!(parsed.mute.unwrap().reason, None);
+    assert_eq!(parsed.newcomer, None);
+}
+
+#[test]
+fn a_newcomer_text_fits_by_its_padded_body() {
+    assert_eq!(post_body_len("hi"), 256);
+    assert_eq!(post_body_len(&"x".repeat(300)), 512);
+    assert_eq!(post_body_len(""), 0);
+    let window = Newcomer {
+        until: None,
+        body_max: 256,
+    };
+    assert!(window.fits("hi"));
+    assert!(!window.fits(&"x".repeat(300)));
+    let roomy = Newcomer {
+        until: Some(START_MS),
+        body_max: 512,
+    };
+    assert!(roomy.fits(&"x".repeat(300)));
 }

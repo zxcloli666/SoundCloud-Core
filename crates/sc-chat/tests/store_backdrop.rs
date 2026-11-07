@@ -2,8 +2,8 @@ mod store_support;
 
 use sc_chat::store::{NewUpload, Reserved, Store, UploadObject};
 use sc_chat::{
-    BackdropChange, ChatError, ConversationKind, ConversationMeta, ConversationPatch, MediaKind,
-    MetaPatch,
+    BackdropChange, ChatError, ConversationBackdrop, ConversationKind, ConversationMeta,
+    ConversationPatch, ListFilter, ListQuery, MediaKind, MetaPatch, RoomBackdrop,
 };
 use store_support::{avatar, conv, count, store, summary};
 use uuid::Uuid;
@@ -65,6 +65,7 @@ fn a_room_meta_carries_a_committed_backdrop_and_nothing_else() {
             title: String::new(),
             description: String::new(),
             avatar: Some(backdrop(0x61)),
+            backdrop: None,
         }
     );
     assert_eq!(
@@ -96,15 +97,127 @@ fn only_a_committed_backdrop_of_this_room_is_taken() {
     store
         .put_conversations(&[summary(group, ConversationKind::Group)])
         .unwrap();
-    let in_group = upload(&store, group, MediaKind::Backdrop, 0x64, true);
     assert_eq!(
-        store.backdrop_meta(group, &set(in_group)).err(),
+        store
+            .backdrop_meta(group, &set(upload_id_of(&store, id)))
+            .err(),
         Some(ChatError::Invalid)
     );
+}
+
+fn upload_id_of(store: &Store, room: Uuid) -> Uuid {
+    upload(store, room, MediaKind::Backdrop, 0x65, true)
+}
+
+#[test]
+fn a_direct_chat_meta_carries_only_the_backdrop() {
+    let store = store();
+    let id = conv();
+    store
+        .put_conversations(&[summary(id, ConversationKind::Direct)])
+        .unwrap();
+    let upload_id = upload(&store, id, MediaKind::Backdrop, 0x61, true);
+
+    let meta = store.backdrop_meta(id, &set(upload_id)).unwrap();
     assert_eq!(
-        store.backdrop_meta(group, &BackdropChange::Clear).err(),
-        Some(ChatError::Invalid)
+        meta,
+        ConversationMeta {
+            backdrop: Some(backdrop(0x61)),
+            ..ConversationMeta::default()
+        }
     );
+    assert_eq!(
+        store.backdrop_meta(id, &BackdropChange::Clear).unwrap(),
+        ConversationMeta::default()
+    );
+
+    store.put_group_meta(id, &meta).unwrap();
+    assert_eq!(store.backdrop_image(id).unwrap(), Some(backdrop(0x61)));
+    assert_eq!(store.room_backdrop(id).unwrap(), None);
+    assert_eq!(
+        store.attachment(id, Uuid::from_u128(0x61)).unwrap(),
+        Some(backdrop(0x61))
+    );
+}
+
+#[test]
+fn a_group_meta_keeps_its_avatar_next_to_the_backdrop() {
+    let store = store();
+    let id = conv();
+    let mut seat = summary(id, ConversationKind::Group);
+    seat.title = Some("Ночная смена".into());
+    store.put_conversations(&[seat]).unwrap();
+    let upload_id = upload(&store, id, MediaKind::Backdrop, 0x61, true);
+
+    let titled = store.backdrop_meta(id, &set(upload_id)).unwrap();
+    assert_eq!(
+        titled,
+        ConversationMeta {
+            title: "Ночная смена".into(),
+            backdrop: Some(backdrop(0x61)),
+            ..ConversationMeta::default()
+        }
+    );
+
+    let with_avatar = ConversationMeta {
+        avatar: Some(backdrop(0x10)),
+        ..titled.clone()
+    };
+    store.put_group_meta(id, &with_avatar).unwrap();
+    assert_eq!(store.backdrop_image(id).unwrap(), Some(backdrop(0x61)));
+    for n in [0x10, 0x61] {
+        assert_eq!(
+            store.attachment(id, Uuid::from_u128(n)).unwrap(),
+            Some(backdrop(n))
+        );
+    }
+    assert_eq!(store.attachment(id, Uuid::from_u128(0x62)).unwrap(), None);
+
+    let rename = ConversationPatch {
+        meta: Some(MetaPatch {
+            title: Some("Утро".into()),
+            description: None,
+        }),
+        ..ConversationPatch::default()
+    };
+    let renamed = store.next_meta(id, &rename).unwrap();
+    assert_eq!(
+        (renamed.avatar, renamed.backdrop),
+        (Some(backdrop(0x10)), Some(backdrop(0x61)))
+    );
+    let cleared = store.backdrop_meta(id, &BackdropChange::Clear).unwrap();
+    assert_eq!(
+        (cleared.title.as_str(), cleared.avatar, cleared.backdrop),
+        ("Ночная смена", Some(backdrop(0x10)), None)
+    );
+}
+
+#[test]
+fn a_summary_keeps_its_backdrop_in_the_store() {
+    let store = store();
+    let id = conv();
+    let mut seat = summary(id, ConversationKind::Direct);
+    seat.backdrop = Some(ConversationBackdrop {
+        look: RoomBackdrop::Preset {
+            id: "aurora".into(),
+        },
+        by: "7".into(),
+    });
+    store.put_conversations(&[seat.clone()]).unwrap();
+    let read = store.conversation(id).unwrap().unwrap();
+    assert_eq!(read.backdrop, seat.backdrop);
+    let listed = store
+        .conversations(&ListQuery {
+            filter: ListFilter::All,
+            cursor: None,
+            limit: 10,
+        })
+        .unwrap();
+    assert_eq!(listed.items[0].backdrop, seat.backdrop);
+
+    seat.backdrop = None;
+    store.put_conversations(&[seat]).unwrap();
+    assert_eq!(store.conversation(id).unwrap().unwrap().backdrop, None);
 }
 
 #[test]

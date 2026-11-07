@@ -118,5 +118,6 @@ fn seated(id: ConvId, code: &str, from_seq: Seq, now: Millis) -> ConversationSum
         has_draft: false,
         pinged: false,
         slow_mode_s: 0,
+        backdrop: None,
     }
 }

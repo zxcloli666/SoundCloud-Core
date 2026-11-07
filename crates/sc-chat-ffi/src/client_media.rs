@@ -197,6 +197,24 @@ impl ChatClient {
             .await
     }
 
+    pub async fn set_backdrop(
+        &self,
+        conversation_id: ConvId,
+        change: BackdropChange,
+    ) -> Result<Option<Message>, ChatError> {
+        self.run(|chat| async move { chat.set_backdrop(conversation_id, change).await })
+            .await
+    }
+
+    pub async fn set_backdrop_preset(
+        &self,
+        conversation_id: ConvId,
+        preset_id: String,
+    ) -> Result<Option<Message>, ChatError> {
+        self.run(|chat| async move { chat.set_backdrop_preset(conversation_id, preset_id).await })
+            .await
+    }
+
     pub async fn set_room_backdrop(
         &self,
         conversation_id: ConvId,

@@ -4,7 +4,7 @@ use crate::api::wire::{
     ConversationChange, ConversationList, ConversationView, MyChange, NewConversation, SetTtl,
     TtlAnswer,
 };
-use crate::contracts::{ChatResult, ConvId, DeleteScope};
+use crate::contracts::{ChatResult, ConvId, DeleteScope, RoomBackdrop};
 
 impl Api {
     pub async fn conversations(&self, cursor: Option<&str>) -> ChatResult<ConversationList> {
@@ -51,6 +51,15 @@ impl Api {
 
     pub async fn set_ttl(&self, id: ConvId, ttl_s: Option<u32>) -> ChatResult<TtlAnswer> {
         self.put(&format!("/chat/conversations/{id}/ttl"), &SetTtl { ttl_s })
+            .await
+    }
+
+    pub async fn set_backdrop(
+        &self,
+        id: ConvId,
+        backdrop: Option<&RoomBackdrop>,
+    ) -> ChatResult<ConversationView> {
+        self.put(&format!("/chat/conversations/{id}/backdrop"), &backdrop)
             .await
     }
 }

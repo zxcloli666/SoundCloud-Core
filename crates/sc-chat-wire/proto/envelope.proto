@@ -63,6 +63,7 @@ message Meta {
   string title = 1;
   string description = 2;
   string avatar_media_id = 3;
+  string backdrop_media_id = 4;
 }
 
 message Pin {

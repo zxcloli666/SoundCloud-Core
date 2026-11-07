@@ -115,7 +115,7 @@ async fn the_outbox_names_the_backdrop_a_room_meta_carries() {
     let outbox = Outbox::new(rig.engine.store().clone());
     let send = format!("/chat/conversations/{R}/messages");
     for (n, shown) in [(1, Some(X)), (2, None)] {
-        let envelope = envelope::encode(&Content::Meta(room_meta(shown))).unwrap();
+        let envelope = envelope::encode(&Content::Meta(Box::new(room_meta(shown)))).unwrap();
         outbox
             .push(OutboxItem {
                 client_id: Uuid::from_u128(0xc0 + n),

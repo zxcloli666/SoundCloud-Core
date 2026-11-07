@@ -2,7 +2,10 @@ mod support;
 
 use sc_chat::media::prepare_backdrop;
 use sc_chat::store::Store;
-use sc_chat::{BackdropChange, ChatError, ConversationKind, ConversationMeta, MediaKind};
+use sc_chat::{
+    BackdropChange, BackdropReport, ChatError, ConversationKind, ConversationMeta, MediaKind,
+    ReportReason,
+};
 use support::{Rig, committed, jpeg, settle, summary};
 use uuid::Uuid;
 
@@ -146,4 +149,66 @@ async fn a_room_without_a_known_code_is_not_found_before_the_network() {
     assert_eq!(preset.err(), Some(ChatError::NotFound));
     let clear = settle(rig.client.set_room_backdrop(ROOM, BackdropChange::Clear)).await;
     assert_eq!(clear.err(), Some(ChatError::NotFound));
+}
+
+#[tokio::test]
+async fn a_group_backdrop_goes_to_the_backdrop_route_before_any_meta_is_queued() {
+    let rig = Rig::new();
+    rig.with_store().await;
+    let store = rig.side_store();
+    let group = Uuid::from_u128(0x6a);
+    store
+        .put_conversations(&[summary(group, ConversationKind::Group)])
+        .unwrap();
+    let prepared = settle(rig.client.prepare_backdrop(jpeg(800, 450)))
+        .await
+        .unwrap();
+    let row = settle(rig.client.enqueue_upload(sc_chat_ffi::NewMediaUpload {
+        album: Uuid::new_v4(),
+        position: 0,
+        conversation_id: group,
+        image_ref: "media/b.img".into(),
+        thumb_ref: None,
+        seal: prepared.seal.clone(),
+    }))
+    .await
+    .unwrap();
+    committed(&store, row.id, 0x63, None);
+    let before = rig.transport.requests();
+
+    let refused = settle(
+        rig.client
+            .set_backdrop(group, BackdropChange::Set { upload_id: row.id }),
+    )
+    .await;
+    assert_eq!(refused.err(), Some(SETTINGS_REFUSED));
+    let preset = settle(rig.client.set_backdrop_preset(group, "aurora".into())).await;
+    assert_eq!(preset.err(), Some(SETTINGS_REFUSED));
+    assert!(rig.transport.requests() > before);
+    let thread = settle(rig.client.open_thread(group)).await.unwrap();
+    assert!(thread.messages.is_empty());
+    assert_eq!(store.backdrop_image(group).unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_direct_chat_backdrop_and_its_report_reach_the_network() {
+    let rig = Rig::new();
+    rig.with_store().await;
+    let dm = Uuid::from_u128(0x6d);
+    rig.side_store()
+        .put_conversations(&[summary(dm, ConversationKind::Direct)])
+        .unwrap();
+    let before = rig.transport.requests();
+
+    let cleared = settle(rig.client.set_backdrop(dm, BackdropChange::Clear)).await;
+    assert_eq!(cleared.err(), Some(SETTINGS_REFUSED));
+    let report = settle(rig.client.report_backdrop(BackdropReport {
+        conversation_id: dm,
+        media_id: MEDIA,
+        reason: ReportReason::Harassment,
+        comment: None,
+    }))
+    .await;
+    assert_eq!(report.err(), Some(SETTINGS_REFUSED));
+    assert!(rig.transport.requests() >= before + 2);
 }

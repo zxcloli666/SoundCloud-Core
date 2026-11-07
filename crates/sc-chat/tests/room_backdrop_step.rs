@@ -63,7 +63,7 @@ async fn a_backdrop_goes_to_the_room_settings_and_hands_back_the_meta_with_its_k
     rig.server.json("PUT", SETTINGS, json!({}));
 
     let step = BackdropStep::set(&store, id, &BackdropChange::Set { upload_id }).unwrap();
-    let meta = step.send(rig.engine.api()).await.unwrap();
+    let meta = step.send(rig.engine.api()).await.unwrap().unwrap();
     let image = meta.avatar.unwrap();
     assert_eq!(
         (image.media_id.as_str(), image.key.as_slice()),
@@ -89,7 +89,7 @@ async fn a_cleared_backdrop_sends_null_and_a_meta_without_an_image() {
     let step = BackdropStep::set(&store, id, &BackdropChange::Clear).unwrap();
     assert_eq!(
         step.send(rig.engine.api()).await.unwrap(),
-        ConversationMeta::default()
+        Some(ConversationMeta::default())
     );
     let body = &rig.server.calls_to("PUT", SETTINGS)[0].body;
     assert_eq!(body.get("backdrop"), Some(&json!(null)));
@@ -168,20 +168,20 @@ async fn a_refused_settings_change_hands_back_no_meta() {
 }
 
 #[test]
-fn a_room_without_a_code_or_a_group_never_reaches_the_network() {
+fn a_room_without_a_code_or_an_unknown_chat_never_reaches_the_network() {
     let store = store();
     let bare = conv();
-    let group = conv();
+    let odd = conv();
     store
         .put_conversations(&[
             summary(bare, ConversationKind::Room),
-            summary(group, ConversationKind::Group),
+            summary(odd, ConversationKind::Unknown),
         ])
         .unwrap();
 
     for (id, expected) in [
         (bare, ChatError::NotFound),
-        (group, ChatError::Invalid),
+        (odd, ChatError::Invalid),
         (conv(), ChatError::Invalid),
     ] {
         assert_eq!(

@@ -1,7 +1,8 @@
 use sc_chat::{
-    ConvId, ConversationKind, ConversationPage, ConversationSummary, CreateConversation,
-    ListFilter, ListQuery, MemberRole, MemberState, Message, MessagePreview, Millis, NotifyLevel,
-    PeerMark, PreviewKind, RichText, Seq, ThreadSnapshot, UserId, UserRef,
+    ConvId, ConversationBackdrop, ConversationKind, ConversationPage, ConversationSummary,
+    CreateConversation, ListFilter, ListQuery, MemberRole, MemberState, Message, MessagePreview,
+    Millis, NotifyLevel, PeerMark, PreviewKind, RichText, RoomBackdrop, Seq, ThreadSnapshot,
+    UserId, UserRef,
 };
 use uuid::Uuid;
 
@@ -95,6 +96,19 @@ pub struct ConversationSummary {
     pub has_draft: bool,
     pub pinged: bool,
     pub slow_mode_s: u32,
+    pub backdrop: Option<ConversationBackdrop>,
+}
+
+#[uniffi::remote(Enum)]
+pub enum RoomBackdrop {
+    Preset { id: String },
+    Image { media_id: Uuid },
+}
+
+#[uniffi::remote(Record)]
+pub struct ConversationBackdrop {
+    pub look: RoomBackdrop,
+    pub by: UserId,
 }
 
 #[uniffi::remote(Enum)]

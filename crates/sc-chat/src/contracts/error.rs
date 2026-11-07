@@ -62,6 +62,8 @@ pub enum ChatError {
     RoomStarRequired,
     #[error("the room image backdrop is paused until {until}")]
     BackdropCooldown { until: Millis },
+    #[error("a chat backdrop needs STAR")]
+    BackdropStarRequired,
     #[error("image uploads are paused")]
     MediaUploadsPaused,
     #[error("some media is missing")]
@@ -133,6 +135,7 @@ impl ChatError {
             "backdrop_cooldown" => Self::BackdropCooldown {
                 until: signed("until"),
             },
+            "backdrop_star_required" => Self::BackdropStarRequired,
             "media_uploads_paused" => Self::MediaUploadsPaused,
             "media_missing" => Self::MediaMissing {
                 ids: uuids(body.get("ids")),

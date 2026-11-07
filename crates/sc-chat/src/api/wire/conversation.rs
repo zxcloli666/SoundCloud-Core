@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::contracts::{ConversationKind, Mute, MyPatch, NotifyLevel};
+use super::known::known;
+use crate::contracts::{ConversationBackdrop, ConversationKind, Mute, MyPatch, NotifyLevel};
 
 pub const MUTE_FOREVER_MS: i64 = 253_402_300_799_000;
 
@@ -24,6 +25,8 @@ pub struct ConversationView {
     pub member_count: i32,
     pub ttl_s: Option<u32>,
     pub room_ref: Option<String>,
+    #[serde(default, deserialize_with = "known")]
+    pub backdrop: Option<ConversationBackdrop>,
     #[serde(default)]
     pub pinged: bool,
     pub me: MembershipView,

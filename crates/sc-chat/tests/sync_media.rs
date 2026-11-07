@@ -56,7 +56,7 @@ fn peer_album(seq: i64, ids: &[u128]) -> Value {
 }
 
 fn group_view(meta: &ConversationMeta) -> ConversationView {
-    let envelope = envelope::encode(&Content::Meta(meta.clone())).unwrap();
+    let envelope = envelope::encode(&Content::Meta(Box::new(meta.clone()))).unwrap();
     let meta_ct = crypto::seal_meta(&Ck::from_bytes(CK), A, 1, &envelope).unwrap();
     let mut view = view(A, 0);
     view["kind"] = json!("group");
@@ -71,6 +71,7 @@ fn meta(avatar: Option<u128>) -> ConversationMeta {
         title: "Ночная смена".into(),
         description: String::new(),
         avatar: avatar.map(store_support::avatar),
+        backdrop: None,
     }
 }
 
@@ -137,7 +138,7 @@ async fn a_meta_message_names_the_avatar_it_carries() {
     let outbox = Outbox::new(rig.engine.store().clone());
     let send = format!("/chat/conversations/{A}/messages");
     for (n, avatar) in [(1, Some(9)), (2, None)] {
-        let envelope = envelope::encode(&Content::Meta(meta(avatar))).unwrap();
+        let envelope = envelope::encode(&Content::Meta(Box::new(meta(avatar)))).unwrap();
         outbox
             .push(OutboxItem {
                 client_id: Uuid::from_u128(0xc0 + n),

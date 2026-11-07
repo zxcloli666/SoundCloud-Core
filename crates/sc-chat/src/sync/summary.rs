@@ -62,6 +62,7 @@ pub fn from_view(
         has_draft: existing.is_some_and(|summary| summary.has_draft),
         pinged: view.pinged,
         slow_mode_s: view.slow_mode_s(),
+        backdrop: view.backdrop.clone(),
     }
 }
 

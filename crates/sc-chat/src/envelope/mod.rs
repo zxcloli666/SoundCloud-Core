@@ -4,6 +4,7 @@ mod encode;
 mod snapshot;
 mod text;
 
+use sc_chat_wire::msg::encode_padded;
 use sc_chat_wire::proto::Attachment;
 
 use crate::contracts::{
@@ -42,7 +43,7 @@ pub enum Content {
         emoji: String,
         on: bool,
     },
-    Meta(ConversationMeta),
+    Meta(Box<ConversationMeta>),
     Pin {
         target: Seq,
         on: bool,
@@ -70,6 +71,24 @@ impl Content {
             | Content::Pin { target, .. } => Some(*target),
             Content::Post(_) | Content::Meta(_) | Content::Suggest(_) | Content::Unknown => None,
         }
+    }
+}
+
+pub fn post_body_len(text: &str) -> usize {
+    let post = Post {
+        text: RichText {
+            text: text.to_owned(),
+            spans: Vec::new(),
+        },
+        reply_to: None,
+        mentions: Vec::new(),
+        embeds: Vec::new(),
+        attachments: Vec::new(),
+        forwarded_from: None,
+    };
+    match encode(&Content::Post(post)) {
+        Ok(envelope) => encode_padded(&envelope).len(),
+        Err(_) => 0,
     }
 }
 

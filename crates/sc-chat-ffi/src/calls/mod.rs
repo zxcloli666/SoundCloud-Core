@@ -4,5 +4,6 @@ mod devices;
 mod login;
 mod media;
 mod meta;
+mod public;
 mod safety;
 mod uploads;
