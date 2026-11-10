@@ -469,3 +469,24 @@ fn a_newcomer_text_fits_by_its_padded_body() {
     };
     assert!(roomy.fits(&"x".repeat(300)));
 }
+
+#[tokio::test]
+async fn a_public_entry_with_a_known_rev_keeps_the_view_it_has() {
+    let mut room = summary(PUBLIC, 0);
+    room.kind = ConversationKind::Public;
+    let rig = real(&[room]);
+    rig.serve_keys(PUBLIC, &[1]);
+    let path = format!("/chat/conversations/{PUBLIC}");
+    for (pos, seq, rev) in [(2, 1, 5), (3, 2, 5), (4, 3, 6)] {
+        let mut heard = entry(PUBLIC, seq, vec![post(PUBLIC, seq, 1, "hi")]);
+        heard["rev"] = json!(rev);
+        rig.server
+            .json("POST", "/chat/sync", answer(pos, INC, vec![heard]));
+        rig.server.json("GET", &path, public_view(None));
+        rig.engine.step(direct_plan()).await.unwrap();
+    }
+
+    assert_eq!(rig.server.calls_to("GET", &path).len(), 2);
+    let stored = rig.engine.store().conversation(PUBLIC).unwrap().unwrap();
+    assert_eq!(stored.last_seq, 3);
+}

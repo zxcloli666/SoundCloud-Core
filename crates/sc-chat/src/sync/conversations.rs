@@ -57,7 +57,9 @@ impl<L: Local> SyncEngine<L> {
             && !self.marks_moved(entry, existing.as_ref())?;
         let kind = existing.as_ref().map(|summary| summary.kind);
         let room = kind == Some(ConversationKind::Room);
-        let aside = kind == Some(ConversationKind::Public) && !self.watching(entry.id);
+        let aside = entry.rev.is_none()
+            && kind == Some(ConversationKind::Public)
+            && !self.watching(entry.id);
         let turned = self.view_turned(entry);
         let moved = structural || bump || behind || aside || turned;
         if existing.is_some() && (room || !moved) {
