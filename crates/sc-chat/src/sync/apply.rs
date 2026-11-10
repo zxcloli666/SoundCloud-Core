@@ -175,6 +175,7 @@ impl<L: Local> SyncEngine<L> {
             for id in gone {
                 state.marks.forget(*id);
                 state.epochs.remove(id);
+                state.view_revs.remove(id);
                 state.room_meta_due.remove(id);
                 state.room_meta_read.remove(id);
                 state.room_meta_locked.remove(id);

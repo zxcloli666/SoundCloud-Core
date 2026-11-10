@@ -1,5 +1,6 @@
 pub mod client;
 pub mod http;
+pub mod media;
 pub mod people;
 pub mod transport;
 
@@ -147,6 +148,12 @@ impl Stack {
 }
 
 pub const SOON: Duration = Duration::from_secs(10);
+
+static PUBLIC_CHAT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+pub async fn public_turn() -> tokio::sync::MutexGuard<'static, ()> {
+    PUBLIC_CHAT.lock().await
+}
 
 pub async fn eventually<F, Fut>(what: &str, check: F)
 where

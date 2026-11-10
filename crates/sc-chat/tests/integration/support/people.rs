@@ -10,6 +10,10 @@ use super::Stack;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
+pub const PUBLIC_OWNER: &str = "1275950656";
+const FORGET_LIMITS: &str =
+    "for _, key in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', key) end return 1";
+
 #[derive(Clone)]
 pub struct Person {
     pub user_id: String,
@@ -35,6 +39,46 @@ impl Stack {
             device_id: Uuid::nil(),
             keys: Arc::new(DeviceKeys::generate().unwrap()),
         })
+    }
+
+    pub fn public_owner(&self) -> Person {
+        self.sql(&format!(
+            "INSERT INTO soundcloud_connections (id, soundcloud_user_id, username, access_token, refresh_token, expires_at, scope) SELECT gen_random_uuid(), '{PUBLIC_OWNER}', 'owner', 'it', 'it', now() + interval '30 days', 'non-expiring' WHERE NOT EXISTS (SELECT 1 FROM soundcloud_connections WHERE soundcloud_user_id = '{PUBLIC_OWNER}')"
+        ));
+        let connection_id = self.sql(&format!(
+            "SELECT id FROM soundcloud_connections WHERE soundcloud_user_id = '{PUBLIC_OWNER}' ORDER BY created_at LIMIT 1"
+        ));
+        self.sql(&format!(
+            "DELETE FROM chat.devices WHERE user_id = '{PUBLIC_OWNER}'"
+        ));
+        self.forget_limits(&format!("*:{PUBLIC_OWNER}"));
+        self.device_of(&Person {
+            user_id: PUBLIC_OWNER.to_owned(),
+            name: "owner".to_owned(),
+            connection_id: connection_id.parse().expect("the owner has a connection"),
+            session_id: Uuid::nil(),
+            device_id: Uuid::nil(),
+            keys: Arc::new(DeviceKeys::generate().unwrap()),
+        })
+    }
+
+    pub fn forget_limits(&self, of: &str) {
+        self.redis(&["EVAL", FORGET_LIMITS, "0", &format!("chat:lim:{of}")]);
+    }
+
+    pub fn star(&self, person: &Person) {
+        self.subscribe(person, "+ 86400");
+    }
+
+    pub fn lapse(&self, person: &Person) {
+        self.subscribe(person, "- 60");
+    }
+
+    fn subscribe(&self, person: &Person, shift: &str) {
+        self.sql(&format!(
+            "INSERT INTO subscriptions (user_urn, exp_date) VALUES ('soundcloud:users:{}', extract(epoch FROM now())::bigint {shift}) ON CONFLICT (user_urn) DO UPDATE SET exp_date = EXCLUDED.exp_date",
+            person.user_id
+        ));
     }
 
     pub fn device_of(&self, person: &Person) -> Person {

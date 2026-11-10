@@ -40,6 +40,6 @@ async fn a_young_device_cannot_drop_an_older_one_but_the_older_one_can_say_not_m
         .device_not_me(second.person.device_id)
         .await
         .unwrap();
-    assert_eq!(second.sync().await, Err(ChatError::DeviceRevoked));
+    assert_eq!(second.sync().await, Err(ChatError::ReloginRequired));
     assert!(first.sync().await.is_ok());
 }

@@ -54,34 +54,59 @@ impl<L: Local> SyncEngine<L> {
         let structural = entry.messages.iter().any(structural);
         let bump = entry.messages.is_empty()
             && entry.typing.is_empty()
-            && !self.marks_moved(entry, existing.as_ref());
-        let room = existing
-            .as_ref()
-            .is_some_and(|summary| summary.kind == ConversationKind::Room);
-        let refresh = existing.is_none() || (!room && (structural || bump || behind));
-        if !refresh {
+            && !self.marks_moved(entry, existing.as_ref())?;
+        let kind = existing.as_ref().map(|summary| summary.kind);
+        let room = kind == Some(ConversationKind::Room);
+        let aside = kind == Some(ConversationKind::Public) && !self.watching(entry.id);
+        let turned = self.view_turned(entry);
+        let moved = structural || bump || behind || aside || turned;
+        if existing.is_some() && (room || !moved) {
             return Ok(existing);
         }
-        match self.api.conversation(entry.id).await {
-            Ok(view) => {
+        let view = match self.api.conversation(entry.id).await {
+            Err(error) if transient(&error) => return Err(error),
+            read => read.ok(),
+        };
+        if let Some(rev) = entry.rev {
+            self.with(|state| state.view_revs.insert(entry.id, rev));
+        }
+        match view {
+            Some(view) => {
                 self.note_view(&view);
                 Ok(Some(self.summary_of(&view, existing.as_ref()).await?))
             }
-            Err(error) if transient(&error) => Err(error),
-            Err(_) => Ok(existing),
+            None => Ok(existing),
         }
+    }
+
+    fn view_turned(&self, entry: &SyncConversation) -> bool {
+        entry
+            .rev
+            .is_some_and(|rev| self.with(|state| state.view_revs.get(&entry.id) != Some(&rev)))
+    }
+
+    fn watching(&self, id: ConvId) -> bool {
+        self.visible() && self.focus() == Some(id)
     }
 
     fn marks_moved(
         &self,
         entry: &SyncConversation,
         existing: Option<&ConversationSummary>,
-    ) -> bool {
+    ) -> ChatResult<bool> {
         let me = self.with(|state| state.user.clone());
         let read = existing.map(|summary| summary.last_read_seq);
-        entry.marks.iter().any(|mark| {
-            me.as_ref() != Some(&mark.user_id) || read.is_none_or(|read| mark.read_seq > read)
-        })
+        let seen = self.store.marks(entry.id)?;
+        Ok(entry.marks.iter().any(|mark| {
+            if me.as_ref() == Some(&mark.user_id) {
+                return read.is_none_or(|read| mark.read_seq > read);
+            }
+            !seen.iter().any(|known| {
+                known.user_id == mark.user_id
+                    && known.read_seq >= mark.read_seq
+                    && known.delivered_seq >= mark.delivered_seq
+            })
+        }))
     }
 
     pub(super) async fn summary_of(

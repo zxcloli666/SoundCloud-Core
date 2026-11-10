@@ -9,9 +9,9 @@ use sc_chat::{
     caps_with_public_chat,
 };
 use serde_json::json;
-use sync_support::fixtures::{summary, text, view};
-use sync_support::real::real;
-use sync_support::{START_MS, Step, rig};
+use sync_support::fixtures::{answer, entry, post, post_from, summary, text, view};
+use sync_support::real::{INC, direct_plan, real};
+use sync_support::{ME, START_MS, Step, rig};
 use uuid::Uuid;
 
 const PUBLIC: Uuid = Uuid::from_u128(0x7075626c6963);
@@ -294,6 +294,109 @@ async fn a_public_post_names_its_mentions_as_pings_and_other_chats_do_not() {
         .server
         .calls_to("POST", &format!("/chat/conversations/{other}/messages"));
     assert!(plain[0].body.get("pings").is_none());
+}
+
+#[tokio::test]
+async fn a_public_reply_pings_the_author_it_answers_ahead_of_the_mentions() {
+    let mut room = summary(PUBLIC, 0);
+    room.kind = ConversationKind::Public;
+    let rig = real(&[room]);
+    rig.serve_keys(PUBLIC, &[1]);
+    let heard = vec![
+        post_from(PUBLIC, 1, 1, "7", "anyone here"),
+        post_from(PUBLIC, 2, 1, ME, "me"),
+    ];
+    rig.server.json(
+        "POST",
+        "/chat/sync",
+        answer(2, INC, vec![entry(PUBLIC, 2, heard)]),
+    );
+    rig.server.json(
+        "GET",
+        &format!("/chat/conversations/{PUBLIC}"),
+        public_view(None),
+    );
+    rig.engine.step(direct_plan()).await.unwrap();
+    let send = format!("/chat/conversations/{PUBLIC}/messages");
+    let outbox = Outbox::new(rig.engine.store().clone());
+    for (client, reply_to) in [(0xc1, 1), (0xc2, 2), (0xc3, 9)] {
+        let mut reply = text("yes");
+        reply.reply_to = reply_to;
+        reply.mentions = vec!["3".into(), "7".into()];
+        outbox
+            .push(OutboxItem {
+                client_id: Uuid::from_u128(client),
+                conversation_id: PUBLIC,
+                class: MessageClass::Post,
+                target_seq: None,
+                envelope: reply.encode_to_vec(),
+                created_at: START_MS,
+                attempts: 0,
+                next_at: START_MS,
+            })
+            .unwrap();
+        rig.server.json(
+            "POST",
+            &send,
+            json!({"seq": 2 + client - 0xc0, "ts": START_MS, "expires_at": null}),
+        );
+    }
+
+    assert_eq!(rig.engine.flush_outbox().await, Ok(3));
+
+    let sent = rig.server.calls_to("POST", &send);
+    assert_eq!(sent[0].body["pings"], json!(["7", "3"]));
+    assert_eq!(sent[1].body["pings"], json!(["3", "7"]));
+    assert_eq!(sent[2].body["pings"], json!(["3", "7"]));
+}
+
+#[tokio::test]
+async fn a_public_entry_with_messages_rereads_the_view_unless_the_chat_is_watched() {
+    let mut room = summary(PUBLIC, 0);
+    room.kind = ConversationKind::Public;
+    let rig = real(&[room]);
+    rig.serve_keys(PUBLIC, &[1]);
+    let path = format!("/chat/conversations/{PUBLIC}");
+    rig.server.json(
+        "POST",
+        "/chat/sync",
+        answer(
+            2,
+            INC,
+            vec![entry(PUBLIC, 1, vec![post(PUBLIC, 1, 1, "you")])],
+        ),
+    );
+    rig.server.json("GET", &path, public_view(Some(true)));
+
+    rig.engine.step(direct_plan()).await.unwrap();
+
+    assert!(
+        rig.engine
+            .store()
+            .conversation(PUBLIC)
+            .unwrap()
+            .unwrap()
+            .pinged
+    );
+    assert_eq!(rig.server.calls_to("GET", &path).len(), 1);
+
+    rig.engine.set_visible(true);
+    rig.engine.set_focus(Some(PUBLIC));
+    rig.server.json(
+        "POST",
+        "/chat/sync",
+        answer(
+            3,
+            INC,
+            vec![entry(PUBLIC, 2, vec![post(PUBLIC, 2, 1, "more")])],
+        ),
+    );
+
+    rig.engine.step(direct_plan()).await.unwrap();
+
+    assert_eq!(rig.server.calls_to("GET", &path).len(), 1);
+    let stored = rig.engine.store().conversation(PUBLIC).unwrap().unwrap();
+    assert_eq!(stored.last_seq, 2);
 }
 
 #[tokio::test]

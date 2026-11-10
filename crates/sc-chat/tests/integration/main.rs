@@ -1,5 +1,7 @@
 mod support;
 
+mod backdrop;
+mod backdrop_report;
 mod block;
 mod devices;
 mod dm;
@@ -7,6 +9,8 @@ mod group;
 mod history;
 mod moderation;
 mod outbox;
+mod public;
+mod public_staff;
 mod relogin;
 mod replay;
 mod report;

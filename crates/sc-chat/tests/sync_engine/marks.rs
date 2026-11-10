@@ -122,6 +122,62 @@ async fn a_bump_that_carries_only_my_settled_mark_refreshes_the_chat() {
 }
 
 #[tokio::test]
+async fn a_bump_that_repeats_a_peer_mark_refreshes_the_chat_and_a_moved_mark_does_not() {
+    let rig = rig();
+    synced(&rig);
+    rig.local.put_conversations(&[summary(A, 3)]).unwrap();
+    let path = format!("/chat/conversations/{A}");
+    let marked = |read: i64| {
+        let mut bump = entry(A, 3, vec![]);
+        bump["marks"] = json!([{"user_id": PEER, "read_seq": read, "delivered_seq": 3}]);
+        bump
+    };
+    for (pos, read) in [(2, 2), (3, 3)] {
+        rig.server
+            .json("POST", "/chat/sync", answer(pos, INC, vec![marked(read)]));
+        rig.engine.step(plan(&rig)).await.unwrap();
+    }
+    assert!(rig.server.calls_to("GET", &path).is_empty());
+
+    let mut timed = view(A, 3);
+    timed["ttl_s"] = json!(3_600);
+    rig.server
+        .json("POST", "/chat/sync", answer(4, INC, vec![marked(3)]));
+    rig.server.json("GET", &path, timed);
+    rig.server
+        .json("GET", "/chat/users/200/card", card(PEER, "peer"));
+
+    rig.engine.step(plan(&rig)).await.unwrap();
+
+    assert_eq!(rig.server.calls_to("GET", &path).len(), 1);
+    assert_eq!(rig.local.summary(A).unwrap().ttl_s, Some(3_600));
+}
+
+#[tokio::test]
+async fn a_view_rev_rereads_the_chat_once_per_value_even_under_messages() {
+    let rig = rig();
+    synced(&rig);
+    rig.local.put_conversations(&[summary(A, 1)]).unwrap();
+    rig.local.add_key(A, 1, sync_support::ck_bytes(A, 1));
+    let path = format!("/chat/conversations/{A}");
+    rig.server
+        .json("GET", "/chat/users/200/card", card(PEER, "peer"));
+    let mut timed = view(A, 4);
+    timed["ttl_s"] = json!(3_600);
+    rig.server.json("GET", &path, view(A, 2));
+    rig.server.json("GET", &path, timed);
+    for (seq, rev, reads) in [(2, 11, 1), (3, 11, 1), (4, 12, 2)] {
+        let mut live = entry(A, seq, vec![post(A, seq, 1, "hey")]);
+        live["rev"] = json!(rev);
+        rig.server
+            .json("POST", "/chat/sync", answer(seq as u64, INC, vec![live]));
+        rig.engine.step(plan(&rig)).await.unwrap();
+        assert_eq!(rig.server.calls_to("GET", &path).len(), reads);
+    }
+    assert_eq!(rig.local.summary(A).unwrap().ttl_s, Some(3_600));
+}
+
+#[tokio::test]
 async fn my_read_mark_from_another_device_moves_without_a_refresh() {
     let rig = rig();
     synced(&rig);

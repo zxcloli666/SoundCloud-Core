@@ -20,6 +20,7 @@ pub trait Local: Send + Sync {
     fn users(&self, ids: &[UserId]) -> ChatResult<Vec<UserRef>>;
     fn put_users(&self, users: &[UserRef]) -> ChatResult<()>;
     fn put_marks(&self, id: ConvId, marks: &[PeerMark]) -> ChatResult<()>;
+    fn marks(&self, id: ConvId) -> ChatResult<Vec<PeerMark>>;
     fn put_messages(&self, items: &[StoredMessage]) -> ChatResult<()>;
     fn messages(&self, id: ConvId, query: &HistoryQuery) -> ChatResult<HistoryPage>;
     fn sealed_messages(&self, id: ConvId, epoch: u32) -> ChatResult<Vec<StoredMessage>>;
@@ -101,6 +102,10 @@ impl Local for LocalStore {
 
     fn put_marks(&self, id: ConvId, marks: &[PeerMark]) -> ChatResult<()> {
         self.store.put_marks(id, marks)
+    }
+
+    fn marks(&self, id: ConvId) -> ChatResult<Vec<PeerMark>> {
+        self.store.marks(id)
     }
 
     fn put_messages(&self, items: &[StoredMessage]) -> ChatResult<()> {

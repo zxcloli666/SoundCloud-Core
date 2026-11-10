@@ -1,6 +1,6 @@
 [package]
 name = "sc-chat"
-version = "0.2.8"
+version = "0.2.9"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,6 +27,6 @@ qcms = { version = "0.3", default-features = false, features = ["iccv4-enabled"]
 
 [dev-dependencies]
 sc-chat-wire = { path = "../sc-chat-wire", features = ["vectors"] }
-tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util"] }
+tokio = { version = "1", features = ["rt", "macros", "time", "net", "io-util", "sync"] }
 crc32fast = "1"
 flate2 = "1"
