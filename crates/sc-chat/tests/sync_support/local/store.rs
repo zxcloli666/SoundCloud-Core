@@ -102,6 +102,17 @@ impl Local for MemoryLocal {
         Ok(())
     }
 
+    fn marks(&self, id: ConvId) -> ChatResult<Vec<PeerMark>> {
+        Ok(self
+            .data
+            .lock()
+            .unwrap()
+            .marks
+            .get(&id)
+            .cloned()
+            .unwrap_or_default())
+    }
+
     fn put_messages(&self, items: &[StoredMessage]) -> ChatResult<()> {
         let mut data = self.data.lock().unwrap();
         for item in items {

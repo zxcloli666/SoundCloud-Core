@@ -6,7 +6,7 @@ use super::{SyncEngine, fatal, jitter, summary};
 use crate::api::wire::{SendAnswer, SendMessage};
 use crate::contracts::{
     ChatError, ChatResult, ClientId, ConvId, ConversationKind, CoreEvent, HistoryQuery, Message,
-    MessageClass, MessagesEvent, MessagesOrigin, Seq,
+    MessageClass, MessagesEvent, MessagesOrigin, Seq, UserId,
 };
 use crate::crypto::MessageAt;
 use crate::media::post_media;
@@ -95,16 +95,29 @@ impl<L: Local> SyncEngine<L> {
         if !public {
             return Ok(Vec::new());
         }
+        let replied = self.replied_author(item.conversation_id, envelope.reply_to)?;
         let mut pings: Vec<String> = Vec::new();
-        for id in envelope.mentions.iter().filter(|id| !id.is_empty()) {
+        for id in replied.iter().chain(&envelope.mentions) {
             if pings.len() == PINGS_MAX {
                 break;
             }
-            if !pings.contains(id) {
+            if !id.is_empty() && !pings.contains(id) {
                 pings.push(id.clone());
             }
         }
         Ok(pings)
+    }
+
+    fn replied_author(&self, conversation_id: ConvId, reply_to: u64) -> ChatResult<Option<UserId>> {
+        let Some(seq) = Seq::try_from(reply_to).ok().filter(|seq| *seq > 0) else {
+            return Ok(None);
+        };
+        let me = self.with(|state| state.user.clone());
+        Ok(self
+            .message_at(conversation_id, seq)?
+            .into_iter()
+            .map(|message| message.sender)
+            .find(|sender| me.as_ref() != Some(sender)))
     }
 
     fn after_send(&self, item: &OutboxItem, seq: Seq) -> ChatResult<()> {
