@@ -13,7 +13,9 @@ Backend `scripts/chat-it.sh` builds it in podman and on the host:
 - `chat-it-ai`, a fake OpenAI-compatible judge (`scripts/chat-it/fake-ai.py`) that checks the key and the strict schema;
 - `chat-it-relay`, nginx that forwards `/chat/x` to chat-api like a relay;
 - `chat-it-s3`, SeaweedFS with the `chat-it` bucket as chat store 1;
-- chat-api (`API_ROLE=rt`, debug build) on `127.0.0.1:3417` with AI moderation, the public chat and media uploads on.
+- chat-api (`API_ROLE=rt`, debug build) on `127.0.0.1:3417` with AI moderation, the public chat and media uploads on;
+- the full API (same binary, `AUTH_X=on`) on `127.0.0.1:3418` for `/auth/*`;
+- `chat-it-front`, nginx on `127.0.0.1:6397` that sends `/auth/*` to the full API and the rest to chat-api. `CHAT_IT_ORIGIN` points at it.
 
 ```sh
 cd Backend && scripts/chat-it.sh up > /tmp/chat-it.env
@@ -54,5 +56,3 @@ cargo test -p sc-chat --test integration -- --ignored
 | `backdrop_report.rs` | a backdrop report waits for the admin with the image as evidence, the AI judge leaves it alone, an uphold clears the backdrop |
 
 `public.rs`, `public_staff.rs` and the public test in `backdrop.rs` take turns on the one public chat. They log in its owner, user 1275950656, and drop his older devices and limits first.
-
-The sealed relogin and both link scenarios in `relogin.rs` call `/auth/*`. Since Backend #115 only the full API serves it on `/auth/x`, and this stack runs chat-api alone, so they fail here.

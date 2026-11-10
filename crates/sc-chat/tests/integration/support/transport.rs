@@ -3,12 +3,19 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use sc_chat::channel::CHANNEL_PATH;
-use sc_chat::{Tier, Transport, TransportError, TransportRequest, TransportResponse, async_trait};
+use std::sync::Arc;
+
+use sc_chat::api::{CallOptions, Exchange, SealedExchange, Signer};
+use sc_chat::channel::{AUTH_PATH, CHANNEL_PATH, Channel, InnerAnswer, InnerCall};
+use sc_chat::login::is_login_path;
+use sc_chat::{
+    ChatResult, Tier, Transport, TransportError, TransportRequest, TransportResponse, async_trait,
+};
 
 use super::http::{self, Request};
 
 pub struct HttpTransport {
+    path: &'static str,
     routes: Vec<(Tier, String)>,
     sent: Mutex<Vec<(Tier, Vec<u8>)>>,
     losing: AtomicBool,
@@ -16,7 +23,12 @@ pub struct HttpTransport {
 
 impl HttpTransport {
     pub fn new(routes: Vec<(Tier, String)>) -> Self {
+        Self::at(CHANNEL_PATH, routes)
+    }
+
+    pub fn at(path: &'static str, routes: Vec<(Tier, String)>) -> Self {
         Self {
+            path,
             routes,
             sent: Mutex::new(Vec::new()),
             losing: AtomicBool::new(false),
@@ -56,7 +68,7 @@ impl Transport for HttpTransport {
             &origin,
             Request {
                 method: "POST",
-                path: CHANNEL_PATH,
+                path: self.path,
                 headers: vec![("content-type", "application/octet-stream".to_owned())],
                 body: request.envelope,
                 timeout: Duration::from_millis(request.timeout_ms),
@@ -80,5 +92,42 @@ impl Transport for HttpTransport {
             body: reply.body,
             retry_after_ms,
         })
+    }
+}
+
+pub struct SplitExchange {
+    chat: SealedExchange,
+    auth: SealedExchange,
+}
+
+impl SplitExchange {
+    pub fn new(
+        channel: Arc<Channel>,
+        chat: Arc<HttpTransport>,
+        routes: Vec<(Tier, String)>,
+    ) -> Self {
+        let auth = Arc::new(HttpTransport::at(AUTH_PATH, routes));
+        Self {
+            chat: SealedExchange::new(channel.clone(), chat),
+            auth: SealedExchange::new(channel, auth),
+        }
+    }
+}
+
+#[async_trait]
+impl Exchange for SplitExchange {
+    async fn exchange(
+        &self,
+        call: &InnerCall,
+        signer: &Signer,
+        tier: Tier,
+        options: &CallOptions,
+    ) -> ChatResult<InnerAnswer> {
+        let side = if is_login_path(&call.path) {
+            &self.auth
+        } else {
+            &self.chat
+        };
+        side.exchange(call, signer, tier, options).await
     }
 }

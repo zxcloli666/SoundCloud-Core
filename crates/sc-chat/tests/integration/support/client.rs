@@ -18,7 +18,7 @@ use sc_chat::{
 use uuid::Uuid;
 
 use super::people::Person;
-use super::transport::HttpTransport;
+use super::transport::{HttpTransport, SplitExchange};
 use super::{SOON, Stack, within};
 
 const RAW_BODY: usize = 64;
@@ -125,9 +125,14 @@ impl Client {
     }
 
     pub fn with_store(routes: Vec<(Tier, String)>, person: &Person, store: Arc<Store>) -> Self {
-        let transport = Arc::new(HttpTransport::new(routes));
+        let transport = Arc::new(HttpTransport::new(routes.clone()));
         let channel = Arc::new(Channel::new(Arc::new(WallClock)));
-        let api = Arc::new(Api::new(channel, transport.clone()));
+        let exchange = Arc::new(SplitExchange::new(
+            channel.clone(),
+            transport.clone(),
+            routes,
+        ));
+        let api = Arc::new(Api::with_exchange(channel, transport.clone(), exchange));
         api.set_identity(Some(Identity {
             session_id: person.session_id.to_string(),
             device_id: person.device_id,
