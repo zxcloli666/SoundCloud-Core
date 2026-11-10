@@ -13,13 +13,15 @@ use sc_chat::sync::{SyncEngine, SyncOutcome};
 use sc_chat::{
     ChatResult, Clock, ConvId, ConversationSummary, CoreEvent, DeviceId, Events, GoneMessage,
     HistoryQuery, Message, MessageBody, Millis, RichText, SystemEvent, SystemKind, Tier,
-    async_trait,
+    async_trait, caps_with_public_chat,
 };
 use uuid::Uuid;
 
 use super::people::Person;
 use super::transport::HttpTransport;
 use super::{SOON, Stack, within};
+
+const RAW_BODY: usize = 64;
 
 pub struct WallClock;
 
@@ -160,6 +162,12 @@ impl Client {
             .await
     }
 
+    pub async fn see_public(&self) -> ChatResult<DeviceView> {
+        self.api
+            .refresh_device("0.0.0", &caps_with_public_chat(Vec::new()))
+            .await
+    }
+
     pub async fn sync(&self) -> ChatResult<SyncOutcome> {
         let plan = self.engine.next_plan()?;
         let outcome = self.engine.step(plan).await?;
@@ -187,17 +195,19 @@ impl Client {
     }
 
     pub fn queue(&self, conversation_id: ConvId, text: &str) -> ChatResult<Uuid> {
-        let content = Content::Post(Post {
-            text: RichText {
-                text: text.to_owned(),
-                spans: Vec::new(),
-            },
-            mentions: Vec::new(),
-            embeds: Vec::new(),
-            attachments: Vec::new(),
-            reply_to: None,
-            forwarded_from: None,
-        });
+        self.queue_content(conversation_id, &Content::Post(post(text)))
+    }
+
+    pub async fn send_content(
+        &self,
+        conversation_id: ConvId,
+        content: &Content,
+    ) -> ChatResult<usize> {
+        self.queue_content(conversation_id, content)?;
+        self.engine.flush_outbox().await
+    }
+
+    pub fn queue_content(&self, conversation_id: ConvId, content: &Content) -> ChatResult<Uuid> {
         let now = self.api.channel().now_ms();
         let client_id = Uuid::new_v4();
         self.outbox.push(OutboxItem {
@@ -205,7 +215,7 @@ impl Client {
             conversation_id,
             class: content.class(),
             target_seq: content.target(),
-            envelope: envelope::encode(&content)?.encode_to_vec(),
+            envelope: envelope::encode(content)?.encode_to_vec(),
             created_at: now,
             attempts: 0,
             next_at: now,
@@ -215,22 +225,36 @@ impl Client {
 
     pub async fn raw_post(&self, conversation_id: ConvId) -> ChatResult<SendAnswer> {
         let view = self.api.conversation(conversation_id).await?;
-        self.raw_post_at(conversation_id, view.key_epoch).await
+        self.raw_post_at(conversation_id, view.key_epoch, RAW_BODY)
+            .await
     }
 
     pub async fn raw_room_post(&self, conversation_id: ConvId) -> ChatResult<SendAnswer> {
-        let keys = self.api.keys(conversation_id, None).await?;
-        let epoch = keys.iter().map(|key| key.epoch).max().unwrap_or_default();
-        self.raw_post_at(conversation_id, epoch).await
+        self.raw_room_post_of(conversation_id, RAW_BODY).await
     }
 
-    async fn raw_post_at(&self, conversation_id: ConvId, epoch: i32) -> ChatResult<SendAnswer> {
+    pub async fn raw_room_post_of(
+        &self,
+        conversation_id: ConvId,
+        body_len: usize,
+    ) -> ChatResult<SendAnswer> {
+        let keys = self.api.keys(conversation_id, None).await?;
+        let epoch = keys.iter().map(|key| key.epoch).max().unwrap_or_default();
+        self.raw_post_at(conversation_id, epoch, body_len).await
+    }
+
+    async fn raw_post_at(
+        &self,
+        conversation_id: ConvId,
+        epoch: i32,
+        body_len: usize,
+    ) -> ChatResult<SendAnswer> {
         let message = SendMessage {
             client_id: Uuid::new_v4(),
             class: "post".into(),
             epoch,
             target_seq: None,
-            body: vec![7; 64],
+            body: vec![7; body_len],
             media: Vec::new(),
             pings: Vec::new(),
         };
@@ -286,5 +310,19 @@ impl Client {
 
     pub fn conversation(&self, conversation_id: ConvId) -> Option<ConversationSummary> {
         self.store().conversation(conversation_id).ok().flatten()
+    }
+}
+
+pub fn post(text: &str) -> Post {
+    Post {
+        text: RichText {
+            text: text.to_owned(),
+            spans: Vec::new(),
+        },
+        mentions: Vec::new(),
+        embeds: Vec::new(),
+        attachments: Vec::new(),
+        reply_to: None,
+        forwarded_from: None,
     }
 }

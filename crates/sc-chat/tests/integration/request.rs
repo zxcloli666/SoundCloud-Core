@@ -11,11 +11,11 @@ async fn a_stranger_from_an_hour_old_session_lands_in_requests_with_three_posts_
     let stack = Stack::from_env();
     let ann = Client::up(&stack, &stack.person("ann")).await;
     let dee = Client::up(&stack, &stack.person("dee")).await;
-    let open = SettingsChange {
-        dm_policy: Some(DmPolicy::Everyone),
+    let following = SettingsChange {
+        dm_policy: Some(DmPolicy::Following),
         ..SettingsChange::default()
     };
-    dee.api.put_settings(&open).await.unwrap();
+    dee.api.put_settings(&following).await.unwrap();
     assert_eq!(
         ann.api
             .create_conversation(&direct(&dee.person.user_id))
@@ -64,11 +64,11 @@ async fn an_accepted_request_moves_to_the_list_and_lifts_the_three_post_cap() {
     let stack = Stack::from_env();
     let ann = Client::up(&stack, &stack.person("ann")).await;
     let dee = Client::up(&stack, &stack.person("dee")).await;
-    let open = SettingsChange {
-        dm_policy: Some(DmPolicy::Everyone),
+    let following = SettingsChange {
+        dm_policy: Some(DmPolicy::Following),
         ..SettingsChange::default()
     };
-    dee.api.put_settings(&open).await.unwrap();
+    dee.api.put_settings(&following).await.unwrap();
     stack.age_session(&ann.person, 2);
     let view = ann
         .api
