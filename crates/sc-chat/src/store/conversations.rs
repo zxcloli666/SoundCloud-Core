@@ -20,6 +20,8 @@ const SELECT: &str = "SELECT id, kind, role, state, accepted, member_count, peer
 
 const ORDER: &str = "ORDER BY pinned_at IS NULL, pinned_at DESC, last_at DESC, id";
 
+const LISTED: &str = "(state = 'active' OR accepted = 1)";
+
 #[derive(Default, Serialize, Deserialize)]
 struct Sealed {
     title: Option<String>,
@@ -184,14 +186,14 @@ pub fn forget_preview(
     Ok(())
 }
 
-fn filter(filter: ListFilter) -> &'static str {
+fn filter(filter: ListFilter) -> String {
     match filter {
-        ListFilter::All => "accepted = 1 AND archived = 0",
-        ListFilter::Direct => "accepted = 1 AND archived = 0 AND kind IN ('direct', 'self')",
-        ListFilter::Groups => "accepted = 1 AND archived = 0 AND kind = 'group'",
-        ListFilter::Unread => "accepted = 1 AND archived = 0 AND unread > 0",
-        ListFilter::Requests => "accepted = 0 AND state IN ('active', 'invited')",
-        ListFilter::Archived => "accepted = 1 AND archived = 1",
+        ListFilter::All => format!("{LISTED} AND archived = 0"),
+        ListFilter::Direct => format!("{LISTED} AND archived = 0 AND kind IN ('direct', 'self')"),
+        ListFilter::Groups => format!("{LISTED} AND archived = 0 AND kind = 'group'"),
+        ListFilter::Unread => format!("{LISTED} AND archived = 0 AND unread > 0"),
+        ListFilter::Requests => "state = 'invited'".to_owned(),
+        ListFilter::Archived => format!("{LISTED} AND archived = 1"),
     }
 }
 
