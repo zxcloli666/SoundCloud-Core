@@ -38,22 +38,30 @@ fn the_list_filters_and_orders_conversations() {
     let request = conv();
     let archived = conv();
     let pinned = conv();
+    let unanswered = conv();
     let mut rows = vec![
         summary(direct, ConversationKind::Direct),
         summary(group, ConversationKind::Group),
         summary(request, ConversationKind::Direct),
         summary(archived, ConversationKind::Group),
         summary(pinned, ConversationKind::Group),
+        summary(unanswered, ConversationKind::Direct),
     ];
     rows[0].last_at = 50;
     rows[0].unread = 2;
     rows[1].last_at = 40;
+    rows[2].state = MemberState::Invited;
     rows[2].accepted = false;
     rows[3].archived = true;
     rows[4].pinned_at = Some(1);
+    rows[5].last_at = 45;
+    rows[5].accepted = false;
     store.put_conversations(&rows).unwrap();
-    assert_eq!(ids(&store, ListFilter::All), vec![pinned, direct, group]);
-    assert_eq!(ids(&store, ListFilter::Direct), vec![direct]);
+    assert_eq!(
+        ids(&store, ListFilter::All),
+        vec![pinned, direct, unanswered, group]
+    );
+    assert_eq!(ids(&store, ListFilter::Direct), vec![direct, unanswered]);
     assert_eq!(ids(&store, ListFilter::Groups), vec![pinned, group]);
     assert_eq!(ids(&store, ListFilter::Unread), vec![direct]);
     assert_eq!(ids(&store, ListFilter::Requests), vec![request]);
@@ -76,7 +84,7 @@ fn the_list_filters_and_orders_conversations() {
         .unwrap();
     assert_eq!(
         rest.items.iter().map(|item| item.id).collect::<Vec<_>>(),
-        vec![group]
+        vec![unanswered, group]
     );
     assert_eq!(rest.next_cursor, None);
 }

@@ -39,7 +39,7 @@ cargo test -p sc-chat --test integration -- --ignored
 | `dm.rs` | DM both ways, `mine`, delivered and read ticks on both sides |
 | `group.rs` | fan-out, a promotion row, a kick purges the chat on the kicked device, a leave |
 | `room.rs` | rename, mute, kick, ban, handoff, end with server and local purge; a quiet room is reaped after 10 min |
-| `request.rs` | under the Following policy: 1 h session rule, 3 posts before accept, decline closes the chat, accept moves it to the list |
+| `request.rs` | under the Following policy: 1 h session rule, 3 posts before accept, decline closes the chat, accept moves it to the list; a dm from a followed sender is a chat at once, the first answer or accept marks it accepted |
 | `block.rs` | block refuses posts as `chat_unavailable` and fails the queued copy, unblock lets new ones through |
 | `report.rs` | evidence decrypts on the admin route, decrypt is audited, no plaintext in the chat-api log |
 | `moderation.rs` | the AI judge rejects a harmless report, removes harassment, bans a repeat for 7 days, every step audited, the key and the text stay out of the log |
