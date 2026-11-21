@@ -98,6 +98,7 @@ async fn a_backdrop_change_goes_to_the_room_settings_before_any_meta_is_queued()
         conversation_id: ROOM,
         image_ref: "media/b.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         seal: prepared.seal.clone(),
     }))
     .await
@@ -169,6 +170,7 @@ async fn a_group_backdrop_goes_to_the_backdrop_route_before_any_meta_is_queued()
         conversation_id: group,
         image_ref: "media/b.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         seal: prepared.seal.clone(),
     }))
     .await

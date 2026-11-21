@@ -19,6 +19,7 @@ fn avatar_upload() -> NewUpload {
         kind: MediaKind::Avatar,
         image_ref: "media/avatar.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: prepared.attachment,
     }
 }
@@ -62,6 +63,7 @@ fn an_avatar_is_uploaded_after_its_one_object() {
     let reserved = Reserved {
         media_id: AVATAR_ID,
         thumb_media_id: None,
+        motion_media_id: None,
         presign_expires_at: 10_000,
     };
     store.upload_reserved(id, &reserved, 2).unwrap();
@@ -120,6 +122,7 @@ fn every_queue_change_is_announced_while_watched() {
             &Reserved {
                 media_id: AVATAR_ID,
                 thumb_media_id: None,
+                motion_media_id: None,
                 presign_expires_at: 10_000,
             },
             4,

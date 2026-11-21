@@ -61,6 +61,7 @@ async fn every_media_route_keeps_its_contract_shape() {
         kind: MediaKind::Image,
         bytes: 151_552,
         thumb_bytes: Some(24_576),
+        motion_bytes: None,
     };
     let reserved = api.reserve_media(&reserve).await.unwrap();
     assert_eq!(reserved.thumb.as_ref().unwrap().id, THUMB);
@@ -151,6 +152,7 @@ async fn media_refusals_arrive_as_their_own_errors() {
         kind: MediaKind::Avatar,
         bytes: 16_384,
         thumb_bytes: None,
+        motion_bytes: None,
     };
     for step in [
         error(

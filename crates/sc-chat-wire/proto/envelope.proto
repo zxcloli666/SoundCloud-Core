@@ -132,6 +132,19 @@ message Thumb {
   uint32 h = 6;
 }
 
+message Motion {
+  string media_id = 1;
+  bytes key = 2;
+  bytes nonce = 3;
+  uint64 size = 4;
+  uint32 w = 5;
+  uint32 h = 6;
+  bytes sha256_plain = 7;
+  bytes sha256_cipher = 8;
+  uint32 frames = 9;
+  uint32 duration_ms = 10;
+}
+
 message Attachment {
   string media_id = 1;
   AttachmentKind kind = 2;
@@ -145,4 +158,5 @@ message Attachment {
   bytes sha256_plain = 10;
   bytes sha256_cipher = 11;
   Thumb thumb = 12;
+  Motion motion = 13;
 }

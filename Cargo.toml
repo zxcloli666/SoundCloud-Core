@@ -27,3 +27,12 @@ opt-level = 3
 
 [profile.dev.package.libwebp-sys]
 opt-level = 3
+
+[profile.dev.package.gif]
+opt-level = 3
+
+[profile.dev.package.weezl]
+opt-level = 3
+
+[profile.dev.package.color_quant]
+opt-level = 3

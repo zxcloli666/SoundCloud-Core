@@ -23,6 +23,7 @@ fn queued(store: &Store, kind: MediaKind, bytes: u64) -> Uuid {
         kind,
         image_ref: "media/single.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: Attachment {
             size: bytes,
             ..Attachment::default()
@@ -160,9 +161,11 @@ fn an_image_without_its_thumb_never_reaches_a_reserve() {
         kind: MediaKind::Image,
         image_ref: "media/a.img".into(),
         thumb_ref: Some("media/a.thumb".into()),
+        motion_ref: None,
         attachment: Attachment {
             size: 1_000,
             thumb: None::<Thumb>,
+            motion: None,
             ..Attachment::default()
         },
     };
@@ -178,6 +181,7 @@ fn an_image_without_its_thumb_never_reaches_a_reserve() {
         kind: MediaKind::Image,
         image_ref: upload.image_ref.clone(),
         thumb_ref: upload.thumb_ref.clone(),
+        motion_ref: None,
         attachment: upload.attachment.clone(),
         state: UploadState::Queued,
         object: UploadObject::Image,
@@ -203,6 +207,7 @@ fn a_single_object_kind_takes_no_thumb() {
             kind,
             image_ref: "media/single.img".into(),
             thumb_ref: Some("media/single.thumb".into()),
+            motion_ref: None,
             attachment: Attachment {
                 size: bytes,
                 ..Attachment::default()

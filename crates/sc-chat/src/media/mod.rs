@@ -1,8 +1,11 @@
+mod animate;
 mod backdrop;
 mod cipher;
 mod error;
 mod ladder;
+mod motion;
 mod open;
+mod open_motion;
 mod prepare;
 pub mod queue;
 mod refs;
@@ -13,16 +16,22 @@ pub use backdrop::BackdropStep;
 pub use cipher::{BLOCK, Blob, Role, open_blob, seal_blob, sealed_len};
 pub use error::MediaError;
 pub use open::{OpenedImage, open_image, open_thumb};
+pub use open_motion::open_motion;
 pub use prepare::{
     PreparedAvatar, PreparedBackdrop, PreparedImage, prepare_avatar, prepare_backdrop,
     prepare_image,
 };
 pub use refs::{image_id, post_media, thumb_id};
-pub use worker::{DECODE_THREADS, DECODE_TIMEOUT, MediaWorker};
+pub use worker::{DECODE_THREADS, DECODE_TIMEOUT, MediaWorker, PREPARE_TIMEOUT};
 
 pub const IMAGE_SIDE: u32 = 1600;
 pub const IMAGE_QUALITY: f32 = 60.0;
 pub const IMAGE_CAP: usize = 600 * 1024;
+pub const MOTION_SIDE: u32 = 480;
+pub const MOTION_FRAMES: u32 = 150;
+pub const MOTION_DURATION_MS: u32 = 10_000;
+pub const MOTION_PIXELS: u64 = 480 * 480 * 150;
+pub const MOTION_SOURCE_PIXELS: u64 = 240_000_000;
 pub const THUMB_SIDE: u32 = 320;
 pub const THUMB_QUALITY: f32 = 45.0;
 pub const THUMB_CAP: usize = 24 * 1024;

@@ -19,6 +19,7 @@ pub struct PreparedMedia {
     pub kind: MediaKind,
     pub image: Vec<u8>,
     pub thumb: Option<Vec<u8>>,
+    pub motion: Option<Vec<u8>>,
     pub w: u32,
     pub h: u32,
     pub thumbhash: Vec<u8>,
@@ -30,12 +31,14 @@ impl PreparedMedia {
         kind: MediaKind,
         image: Vec<u8>,
         thumb: Option<Vec<u8>>,
+        motion: Option<Vec<u8>>,
         attachment: Attachment,
     ) -> Self {
         Self {
             kind,
             image,
             thumb,
+            motion,
             w: attachment.w,
             h: attachment.h,
             thumbhash: attachment.thumbhash.clone(),
@@ -51,6 +54,7 @@ pub struct NewMediaUpload {
     pub conversation_id: ConvId,
     pub image_ref: String,
     pub thumb_ref: Option<String>,
+    pub motion_ref: Option<String>,
     pub seal: Arc<MediaSeal>,
 }
 
@@ -63,15 +67,18 @@ pub struct MediaUploadRow {
     pub kind: MediaKind,
     pub image_ref: String,
     pub thumb_ref: Option<String>,
+    pub motion_ref: Option<String>,
     pub state: UploadState,
     pub object: UploadObject,
     pub media_id: Option<Uuid>,
     pub thumb_media_id: Option<Uuid>,
+    pub motion_media_id: Option<Uuid>,
     pub stage_id: Option<String>,
     pub parts_sent: u32,
     pub presign_expires_at: Option<Millis>,
     pub image_bytes: u64,
     pub thumb_bytes: u64,
+    pub motion_bytes: u64,
     pub attempts: u32,
     pub created_at: Millis,
     pub updated_at: Millis,
@@ -80,9 +87,12 @@ pub struct MediaUploadRow {
 impl From<MediaUpload> for MediaUploadRow {
     fn from(upload: MediaUpload) -> Self {
         let thumb = upload.attachment.thumb.as_ref();
+        let motion = upload.attachment.motion.as_ref();
         Self {
             thumb_media_id: thumb.and_then(|thumb| Uuid::parse_str(&thumb.media_id).ok()),
             thumb_bytes: thumb.map_or(0, |thumb| thumb.size),
+            motion_media_id: motion.and_then(|motion| Uuid::parse_str(&motion.media_id).ok()),
+            motion_bytes: motion.map_or(0, |motion| motion.size),
             image_bytes: upload.attachment.size,
             id: upload.id,
             album: upload.album,
@@ -91,6 +101,7 @@ impl From<MediaUpload> for MediaUploadRow {
             kind: upload.kind,
             image_ref: upload.image_ref,
             thumb_ref: upload.thumb_ref,
+            motion_ref: upload.motion_ref,
             state: upload.state,
             object: upload.object,
             media_id: upload.media_id,
@@ -124,6 +135,7 @@ pub struct PutTargets {
     pub expires_at: Millis,
     pub image: PutTarget,
     pub thumb: Option<PutTarget>,
+    pub motion: Option<PutTarget>,
 }
 
 impl From<queue::PutTargets> for PutTargets {
@@ -132,6 +144,7 @@ impl From<queue::PutTargets> for PutTargets {
             expires_at: targets.expires_at,
             image: targets.image.into(),
             thumb: targets.thumb.map(PutTarget::from),
+            motion: targets.motion.map(PutTarget::from),
         }
     }
 }

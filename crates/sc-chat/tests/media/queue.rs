@@ -21,6 +21,7 @@ pub fn upload(album: Uuid, position: u32) -> NewUpload {
         kind: MediaKind::Image,
         image_ref: format!("media/{album}/{position}.img"),
         thumb_ref: Some(format!("media/{album}/{position}.thumb")),
+        motion_ref: None,
         attachment: prepared.attachment,
     }
 }
@@ -29,6 +30,7 @@ pub fn reserved() -> Reserved {
     Reserved {
         media_id: IMAGE_ID,
         thumb_media_id: Some(THUMB_ID),
+        motion_media_id: None,
         presign_expires_at: 10_000,
     }
 }
@@ -151,6 +153,7 @@ fn a_fresh_presign_for_the_same_ids_keeps_the_progress() {
     let other = Reserved {
         media_id: Uuid::from_u128(0x2a),
         thumb_media_id: Some(Uuid::from_u128(0x2b)),
+        motion_media_id: None,
         presign_expires_at: 95_000,
     };
     store.upload_reserved(id, &other, 6).unwrap();

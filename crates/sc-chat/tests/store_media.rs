@@ -27,6 +27,7 @@ fn shown(n: u128) -> MessageAttachment {
         w: 640,
         h: 480,
         thumbhash: vec![1, 2, 3],
+        motion: false,
     }
 }
 
@@ -46,12 +47,14 @@ fn committed_avatar(store: &Store, id: Uuid, n: u128) -> Uuid {
         kind: MediaKind::Avatar,
         image_ref: "media/avatar.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: avatar(0),
     };
     let upload_id = store.enqueue_upload(&upload, 1).unwrap();
     let reserved = Reserved {
         media_id: Uuid::from_u128(n),
         thumb_media_id: None,
+        motion_media_id: None,
         presign_expires_at: 100,
     };
     store.upload_reserved(upload_id, &reserved, 2).unwrap();
@@ -221,6 +224,7 @@ fn next_meta_takes_only_a_committed_avatar_of_this_group() {
         kind: MediaKind::Avatar,
         image_ref: "media/avatar.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: avatar(0),
     };
     let pending = store.enqueue_upload(&pending, 1).unwrap();

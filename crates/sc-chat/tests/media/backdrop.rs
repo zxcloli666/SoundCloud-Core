@@ -100,6 +100,7 @@ fn a_backdrop_upload_is_one_object_from_queue_to_commit() {
         kind: MediaKind::Backdrop,
         image_ref: "media/backdrop.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: prepared.attachment.clone(),
     };
     let id = store.enqueue_upload(&upload, 1).unwrap();
@@ -109,6 +110,7 @@ fn a_backdrop_upload_is_one_object_from_queue_to_commit() {
             &sc_chat::store::Reserved {
                 media_id: Uuid::from_u128(0x61),
                 thumb_media_id: None,
+                motion_media_id: None,
                 presign_expires_at: 10_000,
             },
             2,

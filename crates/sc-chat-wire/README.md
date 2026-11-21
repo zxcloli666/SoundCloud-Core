@@ -205,6 +205,7 @@ Room chats, tag `type`:
 - `reply_to`, `mentions[]`, `embeds[]` (3 at most), `forwarded_from`.
 - `Embed` is a sender-made snapshot of a track, playlist, user or room invite; receivers validate it (https `*.sndcdn.com` artwork only, 3 KB at most) and render it without requests.
 - `Attachment` field numbers are fixed now and filled in phase 2.
+- `Attachment.motion` is an optional animated WebP of the same picture: at most 480 px a side, 150 frames, 10 s and the image cap. The `Attachment` itself stays a static image, so a build without `motion` shows the still picture. A receiver that knows `motion` checks its frames, total pixels and duration before it plays it.
 - A body this build does not know decodes to no body. Show "update the app to see this message".
 
 Body kind to class:

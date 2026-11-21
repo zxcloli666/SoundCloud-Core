@@ -3,9 +3,9 @@ use rusqlite::Connection;
 #[path = "migrations_media.rs"]
 mod media;
 
-use media::{V3, V4, V5, V6};
+use media::{V3, V4, V5, V6, V9};
 
-pub const VERSION: i64 = 8;
+pub const VERSION: i64 = 9;
 
 const V1: &str = "
 CREATE TABLE meta (
@@ -183,7 +183,7 @@ const V8: &str = "
 ALTER TABLE group_meta ADD COLUMN backdrop_id BLOB;
 ";
 
-const STEPS: [&str; 8] = [V1, V2, V3, V4, V5, V6, V7, V8];
+const STEPS: [&str; 9] = [V1, V2, V3, V4, V5, V6, V7, V8, V9];
 
 pub fn prepare(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "secure_delete", "ON")?;

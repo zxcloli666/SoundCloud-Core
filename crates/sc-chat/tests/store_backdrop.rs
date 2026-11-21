@@ -24,12 +24,14 @@ fn upload(store: &Store, room: Uuid, kind: MediaKind, media: u128, commit: bool)
         kind,
         image_ref: "media/backdrop.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: avatar(0),
     };
     let upload_id = store.enqueue_upload(&upload, 1).unwrap();
     let reserved = Reserved {
         media_id: Uuid::from_u128(media),
         thumb_media_id: None,
+        motion_media_id: None,
         presign_expires_at: 100,
     };
     store.upload_reserved(upload_id, &reserved, 2).unwrap();

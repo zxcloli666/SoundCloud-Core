@@ -17,6 +17,7 @@ pub struct MessageAttachment {
     pub w: u32,
     pub h: u32,
     pub thumbhash: Vec<u8>,
+    pub motion: bool,
 }
 
 #[uniffi::remote(Enum)]
@@ -40,6 +41,7 @@ pub enum UploadState {
 pub enum UploadObject {
     Image,
     Thumb,
+    Motion,
 }
 
 #[uniffi::remote(Record)]
@@ -54,6 +56,7 @@ pub struct MediaUploadView {
     pub parts_sent: u32,
     pub image_bytes: u64,
     pub thumb_bytes: u64,
+    pub motion_bytes: u64,
     pub attempts: u32,
     pub updated_at: Millis,
 }

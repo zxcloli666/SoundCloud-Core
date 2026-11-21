@@ -10,6 +10,8 @@ pub enum MediaError {
     Malformed,
     #[error("animated images are not supported")]
     Animated,
+    #[error("the animation has too many frames or runs too long")]
+    Motion,
     #[error("the file is larger than the limit")]
     TooLarge,
     #[error("the image dimensions are over the limit")]

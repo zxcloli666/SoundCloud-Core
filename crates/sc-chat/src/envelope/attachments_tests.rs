@@ -1,5 +1,7 @@
 use sc_chat_wire::prost::Message;
-use sc_chat_wire::proto::{self, Attachment, AttachmentKind, Envelope, Thumb, envelope::Body};
+use sc_chat_wire::proto::{
+    self, Attachment, AttachmentKind, Envelope, Motion, Thumb, envelope::Body,
+};
 use uuid::Uuid;
 
 use super::{Content, Post, decode, encode};
@@ -27,12 +29,14 @@ fn image(n: u128) -> Attachment {
             w: 320,
             h: 240,
         }),
+        motion: None,
     }
 }
 
 fn avatar(n: u128) -> Attachment {
     Attachment {
         thumb: None,
+        motion: None,
         ..image(n)
     }
 }
@@ -62,6 +66,48 @@ fn an_album_with_or_without_text_survives_a_round_trip() {
         let post = Content::Post(album(vec![image(1), image(2)], text));
         assert_eq!(round_trip(&post), post);
     }
+}
+
+fn with_motion(n: u128, frames: u32, duration_ms: u32) -> Attachment {
+    Attachment {
+        motion: Some(Motion {
+            media_id: Uuid::from_u128(n + 2000).to_string(),
+            key: vec![9; 32],
+            nonce: vec![8; 24],
+            size: 4096,
+            w: 480,
+            h: 270,
+            sha256_cipher: vec![7; 32],
+            frames,
+            duration_ms,
+            ..Motion::default()
+        }),
+        ..image(n)
+    }
+}
+
+#[test]
+fn a_motion_inside_the_caps_survives_and_one_over_them_is_dropped() {
+    let good = with_motion(1, 150, 10_000);
+    let post = Content::Post(album(
+        vec![
+            good.clone(),
+            with_motion(2, 151, 100),
+            with_motion(3, 20, 10_001),
+        ],
+        "",
+    ));
+    let Content::Post(received) = round_trip(&post) else {
+        panic!("not a post");
+    };
+    let motions: Vec<bool> = received
+        .attachments
+        .iter()
+        .map(|attachment| attachment.motion.is_some())
+        .collect();
+    assert_eq!(motions, [true, false, false]);
+    assert_eq!(received.attachments[0], good);
+    assert_eq!(received.attachments.len(), 3);
 }
 
 #[test]

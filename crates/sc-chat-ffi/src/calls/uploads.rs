@@ -34,6 +34,7 @@ impl Chat {
                 kind: upload.seal.kind,
                 image_ref: upload.image_ref,
                 thumb_ref: upload.thumb_ref,
+                motion_ref: upload.motion_ref,
                 attachment: upload.seal.attachment.clone(),
             };
             let id = core.store.enqueue_upload(&new, now)?;
@@ -126,15 +127,21 @@ fn prepared(kind: MediaKind, source: &[u8]) -> ChatResult<PreparedMedia> {
     Ok(match kind {
         MediaKind::Image => {
             let image = media::prepare_image(source)?;
-            PreparedMedia::new(kind, image.image, Some(image.thumb), image.attachment)
+            PreparedMedia::new(
+                kind,
+                image.image,
+                Some(image.thumb),
+                image.motion,
+                image.attachment,
+            )
         }
         MediaKind::Avatar => {
             let avatar = media::prepare_avatar(source)?;
-            PreparedMedia::new(kind, avatar.image, None, avatar.attachment)
+            PreparedMedia::new(kind, avatar.image, None, None, avatar.attachment)
         }
         MediaKind::Backdrop => {
             let backdrop = media::prepare_backdrop(source)?;
-            PreparedMedia::new(kind, backdrop.image, None, backdrop.attachment)
+            PreparedMedia::new(kind, backdrop.image, None, None, backdrop.attachment)
         }
     })
 }

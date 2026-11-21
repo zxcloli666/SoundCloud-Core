@@ -31,6 +31,7 @@ fn keyed() -> Attachment {
             w: 320,
             h: 240,
         }),
+        motion: None,
     }
 }
 
