@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use super::URLS_MAX;
+use super::{URLS_MAX, thumb_id};
 use crate::api::Api;
 use crate::api::wire::{
     CommitAnswer, MediaSelection, PresignedPut, ReserveMedia, UrlsAnswer, UrlsRequest,
@@ -15,18 +15,22 @@ pub struct PutTargets {
     pub expires_at: Millis,
     pub image: PresignedPut,
     pub thumb: Option<PresignedPut>,
+    pub motion: Option<PresignedPut>,
 }
 
 pub async fn reserve(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResult<PutTargets> {
     let upload = store.upload(id)?.ok_or(ChatError::NotFound)?;
     let answer = api.reserve_media(&reserve_request(&upload)?).await?;
-    if (upload.kind == MediaKind::Image) != answer.thumb.is_some() {
+    if (upload.kind == MediaKind::Image) != answer.thumb.is_some()
+        || upload.attachment.motion.is_some() != answer.motion.is_some()
+    {
         return Err(ChatError::Protocol);
     }
     let expires_at = now.saturating_add(i64::from(answer.expires_in_s) * 1_000 - PRESIGN_MARGIN_MS);
     let reserved = Reserved {
         media_id: answer.id,
         thumb_media_id: answer.thumb.as_ref().map(|thumb| thumb.id),
+        motion_media_id: answer.motion.as_ref().map(|motion| motion.id),
         presign_expires_at: expires_at,
     };
     store.upload_reserved(id, &reserved, now)?;
@@ -34,6 +38,7 @@ pub async fn reserve(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatRes
         expires_at,
         image: answer.put,
         thumb: answer.thumb.map(|thumb| thumb.put),
+        motion: answer.motion.map(|motion| motion.put),
     })
 }
 
@@ -55,6 +60,7 @@ pub fn reserve_request(upload: &MediaUpload) -> ChatResult<ReserveMedia> {
         kind: upload.kind,
         bytes: upload.attachment.size,
         thumb_bytes,
+        motion_bytes: upload.attachment.motion.as_ref().map(|motion| motion.size),
     })
 }
 
@@ -72,14 +78,7 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
             committed => committed.map(|()| answer),
         },
         Err(ChatError::MediaMissing { ids }) => {
-            let only_thumb =
-                upload.kind == MediaKind::Image && !ids.is_empty() && !ids.contains(&media_id);
-            let object = if only_thumb {
-                UploadObject::Thumb
-            } else {
-                UploadObject::Image
-            };
-            store.upload_redo(id, object, now)?;
+            store.upload_redo(id, missing(&upload, media_id, &ids), now)?;
             Err(ChatError::MediaMissing { ids })
         }
         Err(ChatError::NotFound) => {
@@ -87,6 +86,19 @@ pub async fn commit(api: &Api, store: &Store, id: Uuid, now: Millis) -> ChatResu
             Err(ChatError::NotFound)
         }
         Err(error) => Err(error),
+    }
+}
+
+fn missing(upload: &MediaUpload, media_id: Uuid, ids: &[Uuid]) -> UploadObject {
+    let thumb_id = thumb_id(&upload.attachment).ok();
+    match upload.kind {
+        MediaKind::Image if ids.is_empty() || ids.contains(&media_id) => UploadObject::Image,
+        MediaKind::Image if thumb_id.is_none_or(|thumb_id| ids.contains(&thumb_id)) => {
+            UploadObject::Thumb
+        }
+        MediaKind::Image if upload.attachment.motion.is_some() => UploadObject::Motion,
+        MediaKind::Image => UploadObject::Thumb,
+        MediaKind::Avatar | MediaKind::Backdrop => UploadObject::Image,
     }
 }
 

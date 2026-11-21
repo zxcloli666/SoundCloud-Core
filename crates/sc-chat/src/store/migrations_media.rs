@@ -114,3 +114,36 @@ WHERE id IN (SELECT message_id FROM message_media);
 
 CREATE INDEX messages_gallery ON messages (conversation_id, seq) WHERE media > 0;
 ";
+
+pub const V9: &str = "
+CREATE TABLE media_uploads_v9 (
+    id BLOB PRIMARY KEY,
+    album BLOB NOT NULL,
+    position INTEGER NOT NULL,
+    conversation_id BLOB NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'image' CHECK (kind IN ('image', 'avatar', 'backdrop')),
+    image_ref TEXT NOT NULL,
+    thumb_ref TEXT,
+    motion_ref TEXT,
+    state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'reserved', 'uploading', 'uploaded', 'committed', 'failed')),
+    object TEXT NOT NULL DEFAULT 'image' CHECK (object IN ('image', 'thumb', 'motion')),
+    media_id BLOB,
+    stage_id TEXT,
+    parts_sent INTEGER NOT NULL DEFAULT 0,
+    presign_expires_at INTEGER,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    nonce BLOB NOT NULL,
+    attachment BLOB NOT NULL
+) WITHOUT ROWID;
+
+INSERT INTO media_uploads_v9 (id, album, position, conversation_id, kind, image_ref, thumb_ref, state, object, media_id, stage_id, parts_sent, presign_expires_at, attempts, created_at, updated_at, nonce, attachment)
+SELECT id, album, position, conversation_id, kind, image_ref, thumb_ref, state, object, media_id, stage_id, parts_sent, presign_expires_at, attempts, created_at, updated_at, nonce, attachment FROM media_uploads;
+
+DROP TABLE media_uploads;
+ALTER TABLE media_uploads_v9 RENAME TO media_uploads;
+
+CREATE INDEX media_uploads_album ON media_uploads (album, position);
+CREATE INDEX media_uploads_open ON media_uploads (created_at, position) WHERE state NOT IN ('committed', 'failed');
+";

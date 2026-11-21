@@ -69,6 +69,8 @@ pub struct MessageAttachment {
     pub w: u32,
     pub h: u32,
     pub thumbhash: Vec<u8>,
+    #[serde(default)]
+    pub motion: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +111,7 @@ pub enum UploadState {
 pub enum UploadObject {
     Image,
     Thumb,
+    Motion,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +127,8 @@ pub struct MediaUploadView {
     pub parts_sent: u32,
     pub image_bytes: u64,
     pub thumb_bytes: u64,
+    #[serde(default)]
+    pub motion_bytes: u64,
     pub attempts: u32,
     pub updated_at: Millis,
 }

@@ -69,6 +69,11 @@ impl From<&MediaUpload> for MediaUploadView {
                 .thumb
                 .as_ref()
                 .map_or(0, |thumb| thumb.size),
+            motion_bytes: upload
+                .attachment
+                .motion
+                .as_ref()
+                .map_or(0, |motion| motion.size),
             attempts: upload.attempts,
             updated_at: upload.updated_at,
         }

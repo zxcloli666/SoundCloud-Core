@@ -5,6 +5,7 @@ mod color;
 mod corpus;
 mod icc;
 mod measure;
+mod motion;
 mod queue;
 mod queue_restart;
 mod roundtrip;

@@ -1,17 +1,18 @@
 use image::DynamicImage;
 use image::imageops::FilterType;
-use sc_chat_wire::proto::{Attachment, AttachmentKind, Thumb};
+use sc_chat_wire::proto::{Attachment, AttachmentKind, Motion, Thumb};
 use sha2::{Digest, Sha256};
 
 use super::cipher::{Blob, Role, seal_blob};
 use super::ladder::{self, Encoded, encode, fit_side};
-use super::{AVATAR_SIDE, BACKDROP_SIDE, IMAGE_SIDE, MIME_WEBP, MediaError, source};
+use super::{AVATAR_SIDE, BACKDROP_SIDE, IMAGE_SIDE, MIME_WEBP, MediaError, motion, source};
 
 const THUMBHASH_SIDE: u32 = 100;
 
 pub struct PreparedImage {
     pub image: Vec<u8>,
     pub thumb: Vec<u8>,
+    pub motion: Option<Vec<u8>>,
     pub attachment: Attachment,
 }
 
@@ -39,11 +40,35 @@ pub fn prepare_image(bytes: &[u8]) -> Result<PreparedImage, MediaError> {
         w: thumb.w,
         h: thumb.h,
     };
+    let (motion, motion_blob) = motion::prepare(bytes)
+        .map(sealed_motion)
+        .transpose()?
+        .unzip();
+    let mut attachment = attachment(&base, &image, &image_blob, Some(thumb));
+    attachment.motion = motion;
     Ok(PreparedImage {
-        attachment: attachment(&base, &image, &image_blob, Some(thumb)),
+        attachment,
         image: image_blob.ciphertext,
         thumb: thumb_blob.ciphertext,
+        motion: motion_blob,
     })
+}
+
+fn sealed_motion(motion: motion::Motion) -> Result<(Motion, Vec<u8>), MediaError> {
+    let blob = seal_blob(Role::Image, &motion.webp)?;
+    let sealed = Motion {
+        media_id: String::new(),
+        key: blob.key.to_vec(),
+        nonce: blob.nonce,
+        size: blob.ciphertext.len() as u64,
+        w: motion.w,
+        h: motion.h,
+        sha256_plain: Sha256::digest(&motion.webp).to_vec(),
+        sha256_cipher: Sha256::digest(&blob.ciphertext).to_vec(),
+        frames: motion.frames,
+        duration_ms: motion.duration_ms,
+    };
+    Ok((sealed, blob.ciphertext))
 }
 
 pub fn prepare_avatar(bytes: &[u8]) -> Result<PreparedAvatar, MediaError> {
@@ -95,6 +120,7 @@ fn attachment(
         sha256_plain: Sha256::digest(&image.webp).to_vec(),
         sha256_cipher: Sha256::digest(&blob.ciphertext).to_vec(),
         thumb,
+        motion: None,
     }
 }
 

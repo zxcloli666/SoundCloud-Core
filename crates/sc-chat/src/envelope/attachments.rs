@@ -1,9 +1,10 @@
-use sc_chat_wire::proto::{Attachment, AttachmentKind as WireKind, Thumb};
+use sc_chat_wire::proto::{Attachment, AttachmentKind as WireKind, Motion, Thumb};
 use uuid::Uuid;
 
 use crate::contracts::{AttachmentKind, ConversationMeta, MessageAttachment};
 use crate::media::{
-    ALBUM_MAX, AVATAR_SERVER_CAP, BACKDROP_SERVER_CAP, IMAGE_CAP, THUMB_SERVER_CAP,
+    ALBUM_MAX, AVATAR_SERVER_CAP, BACKDROP_SERVER_CAP, IMAGE_CAP, MOTION_DURATION_MS,
+    MOTION_FRAMES, MOTION_PIXELS, THUMB_SERVER_CAP,
 };
 
 const KEY_LEN: usize = 32;
@@ -16,6 +17,10 @@ pub fn album(attachments: &[Attachment]) -> Vec<Attachment> {
         .filter(|attachment| image_ok(attachment))
         .take(ALBUM_MAX)
         .cloned()
+        .map(|mut attachment| {
+            attachment.motion = attachment.motion.filter(motion_ok);
+            attachment
+        })
         .collect()
 }
 
@@ -35,6 +40,7 @@ pub fn view(attachment: &Attachment) -> Option<MessageAttachment> {
         w: attachment.w,
         h: attachment.h,
         thumbhash: attachment.thumbhash.clone(),
+        motion: attachment.motion.is_some(),
     })
 }
 
@@ -70,6 +76,19 @@ fn thumb_ok(thumb: &Thumb) -> bool {
         && size_ok(thumb.size, THUMB_SERVER_CAP)
         && thumb.w > 0
         && thumb.h > 0
+}
+
+fn motion_ok(motion: &Motion) -> bool {
+    let pixels = u64::from(motion.w) * u64::from(motion.h) * u64::from(motion.frames);
+    id_ok(&motion.media_id)
+        && keyed(&motion.key, &motion.nonce)
+        && size_ok(motion.size, IMAGE_CAP)
+        && motion.w > 0
+        && motion.h > 0
+        && (2..=MOTION_FRAMES).contains(&motion.frames)
+        && pixels <= MOTION_PIXELS
+        && motion.duration_ms <= MOTION_DURATION_MS
+        && motion.sha256_cipher.len() == SHA256_LEN
 }
 
 fn id_ok(id: &str) -> bool {

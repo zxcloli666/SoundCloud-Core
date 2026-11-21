@@ -274,6 +274,7 @@ async fn an_album_post_names_its_images_and_a_text_post_names_none() {
                 media_id: Uuid::new_v4().to_string(),
                 ..Thumb::default()
             }),
+            motion: None,
             ..Attachment::default()
         })
         .collect();

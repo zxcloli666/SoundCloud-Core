@@ -14,6 +14,7 @@ fn upload(prepared: &PreparedMedia, album: Uuid, thumb_ref: Option<&str>) -> New
         conversation_id: ROOM,
         image_ref: "media/a.img".into(),
         thumb_ref: thumb_ref.map(str::to_owned),
+        motion_ref: None,
         seal: prepared.seal.clone(),
     }
 }

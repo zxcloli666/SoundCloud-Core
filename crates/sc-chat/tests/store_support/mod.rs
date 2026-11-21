@@ -77,12 +77,14 @@ pub fn image(n: u128) -> proto::Attachment {
             w: 320,
             h: 240,
         }),
+        motion: None,
     }
 }
 
 pub fn avatar(n: u128) -> proto::Attachment {
     proto::Attachment {
         thumb: None,
+        motion: None,
         ..image(n)
     }
 }
@@ -326,12 +328,14 @@ pub fn committed_backdrop(store: &Store, conversation_id: ConvId, media: u128) -
         kind: sc_chat::MediaKind::Backdrop,
         image_ref: "media/backdrop.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: avatar(0),
     };
     let upload_id = store.enqueue_upload(&upload, 1).unwrap();
     let reserved = sc_chat::store::Reserved {
         media_id: Uuid::from_u128(media),
         thumb_media_id: None,
+        motion_media_id: None,
         presign_expires_at: 100,
     };
     store.upload_reserved(upload_id, &reserved, 2).unwrap();

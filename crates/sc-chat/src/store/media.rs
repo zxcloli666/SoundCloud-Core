@@ -10,7 +10,12 @@ use crate::contracts::{ChatError, ChatResult, MediaKind, Millis, UploadObject};
 impl Store {
     pub fn enqueue_upload(&self, upload: &NewUpload, now: Millis) -> ChatResult<Uuid> {
         let image = upload.kind == MediaKind::Image;
-        if image != upload.thumb_ref.is_some() || image != upload.attachment.thumb.is_some() {
+        let motion = upload.motion_ref.is_some();
+        if image != upload.thumb_ref.is_some()
+            || image != upload.attachment.thumb.is_some()
+            || motion != upload.attachment.motion.is_some()
+            || (motion && !image)
+        {
             return Err(ChatError::Invalid);
         }
         let id = Uuid::new_v4();
@@ -20,7 +25,7 @@ impl Store {
             &upload.attachment.encode_to_vec(),
         )?;
         self.conn()?.execute(
-            "INSERT INTO media_uploads (id, album, position, conversation_id, kind, image_ref, thumb_ref, created_at, updated_at, nonce, attachment) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10)",
+            "INSERT INTO media_uploads (id, album, position, conversation_id, kind, image_ref, thumb_ref, motion_ref, created_at, updated_at, nonce, attachment) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, ?11)",
             params![
                 id.as_bytes(),
                 upload.album.as_bytes(),
@@ -29,6 +34,7 @@ impl Store {
                 label(upload.kind),
                 upload.image_ref,
                 upload.thumb_ref,
+                upload.motion_ref,
                 now,
                 sealed.nonce,
                 sealed.body,
@@ -94,6 +100,11 @@ impl Store {
         {
             thumb.media_id = thumb_id.to_string();
         }
+        if let (Some(motion), Some(motion_id)) =
+            (upload.attachment.motion.as_mut(), reserved.motion_media_id)
+        {
+            motion.media_id = motion_id.to_string();
+        }
         let sealed = seal::seal(
             &self.keys.body,
             &aad(id),
@@ -143,7 +154,12 @@ impl Store {
             ),
             UploadObject::Thumb => self.touch(
                 id,
-                "UPDATE media_uploads SET state = 'uploaded', parts_sent = 0, stage_id = NULL, updated_at = ?2 WHERE id = ?1 AND kind = 'image' AND state IN ('reserved', 'uploading')",
+                "UPDATE media_uploads SET state = CASE WHEN motion_ref IS NULL THEN 'uploaded' ELSE 'uploading' END, object = CASE WHEN motion_ref IS NULL THEN object ELSE 'motion' END, parts_sent = 0, stage_id = NULL, updated_at = ?2 WHERE id = ?1 AND kind = 'image' AND state IN ('reserved', 'uploading')",
+                params![id.as_bytes(), now],
+            ),
+            UploadObject::Motion => self.touch(
+                id,
+                "UPDATE media_uploads SET state = 'uploaded', parts_sent = 0, stage_id = NULL, updated_at = ?2 WHERE id = ?1 AND motion_ref IS NOT NULL AND state IN ('reserved', 'uploading')",
                 params![id.as_bytes(), now],
             ),
         }
@@ -152,7 +168,7 @@ impl Store {
     pub fn upload_redo(&self, id: Uuid, object: UploadObject, now: Millis) -> ChatResult<()> {
         self.touch(
             id,
-            "UPDATE media_uploads SET state = 'uploading', object = ?2, parts_sent = 0, stage_id = NULL, updated_at = ?3 WHERE id = ?1 AND (?2 = 'image' OR kind = 'image') AND state IN ('reserved', 'uploading', 'uploaded')",
+            "UPDATE media_uploads SET state = 'uploading', object = ?2, parts_sent = 0, stage_id = NULL, updated_at = ?3 WHERE id = ?1 AND (?2 = 'image' OR kind = 'image') AND (?2 <> 'motion' OR motion_ref IS NOT NULL) AND state IN ('reserved', 'uploading', 'uploaded')",
             params![id.as_bytes(), label(object), now],
         )
     }
@@ -218,6 +234,12 @@ fn same_reservation(upload: &MediaUpload, reserved: &Reserved) -> bool {
         .thumb
         .as_ref()
         .map(|thumb| thumb.media_id.clone());
+    let motion_id = upload
+        .attachment
+        .motion
+        .as_ref()
+        .map(|motion| motion.media_id.clone());
     upload.media_id == Some(reserved.media_id)
         && thumb_id == reserved.thumb_media_id.map(|id| id.to_string())
+        && motion_id == reserved.motion_media_id.map(|id| id.to_string())
 }

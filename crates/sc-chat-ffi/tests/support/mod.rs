@@ -233,6 +233,7 @@ pub fn committed(store: &Store, id: uuid::Uuid, media: u128, thumb: Option<u128>
     let reserved = sc_chat::store::Reserved {
         media_id: uuid::Uuid::from_u128(media),
         thumb_media_id: thumb.map(uuid::Uuid::from_u128),
+        motion_media_id: None,
         presign_expires_at: i64::MAX,
     };
     store.upload_reserved(id, &reserved, 1).unwrap();

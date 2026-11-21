@@ -17,6 +17,7 @@ impl fmt::Debug for Attachment {
             .field("sha256_plain", &Hidden(self.sha256_plain.len()))
             .field("sha256_cipher", &Hidden(self.sha256_cipher.len()))
             .field("thumb", &self.thumb)
+            .field("motion", &self.motion)
             .finish()
     }
 }
@@ -30,6 +31,23 @@ impl fmt::Debug for Thumb {
             .field("size", &self.size)
             .field("w", &self.w)
             .field("h", &self.h)
+            .finish()
+    }
+}
+
+impl fmt::Debug for Motion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Motion")
+            .field("media_id", &self.media_id)
+            .field("key", &Hidden(self.key.len()))
+            .field("nonce", &Hidden(self.nonce.len()))
+            .field("size", &self.size)
+            .field("w", &self.w)
+            .field("h", &self.h)
+            .field("sha256_plain", &Hidden(self.sha256_plain.len()))
+            .field("sha256_cipher", &Hidden(self.sha256_cipher.len()))
+            .field("frames", &self.frames)
+            .field("duration_ms", &self.duration_ms)
             .finish()
     }
 }

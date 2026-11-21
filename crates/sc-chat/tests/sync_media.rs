@@ -180,6 +180,7 @@ async fn the_engine_announces_upload_changes() {
         kind: MediaKind::Image,
         image_ref: "media/a.img".into(),
         thumb_ref: Some("media/a.thumb".into()),
+        motion_ref: None,
         attachment: image(0),
     };
     let id = store.enqueue_upload(&upload, START_MS).unwrap();

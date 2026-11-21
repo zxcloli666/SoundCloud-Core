@@ -14,6 +14,8 @@ pub struct ReserveMedia {
     pub bytes: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thumb_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +24,8 @@ pub struct ReserveAnswer {
     pub put: PresignedPut,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thumb: Option<ReservedThumb>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion: Option<ReservedThumb>,
     pub expires_in_s: u32,
     pub used: u64,
     pub quota: u64,

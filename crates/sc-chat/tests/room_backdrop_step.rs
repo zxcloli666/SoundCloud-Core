@@ -28,12 +28,14 @@ fn committed_backdrop(store: &Store, room: Uuid) -> Uuid {
         kind: MediaKind::Backdrop,
         image_ref: "media/backdrop.img".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment: avatar(0),
     };
     let upload_id = store.enqueue_upload(&upload, 1).unwrap();
     let reserved = Reserved {
         media_id: MEDIA,
         thumb_media_id: None,
+        motion_media_id: None,
         presign_expires_at: 100,
     };
     store.upload_reserved(upload_id, &reserved, 2).unwrap();

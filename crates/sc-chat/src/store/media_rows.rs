@@ -20,6 +20,7 @@ pub struct MediaUpload {
     pub kind: MediaKind,
     pub image_ref: String,
     pub thumb_ref: Option<String>,
+    pub motion_ref: Option<String>,
     pub attachment: Attachment,
     pub state: UploadState,
     pub object: UploadObject,
@@ -46,6 +47,7 @@ pub struct NewUpload {
     pub kind: MediaKind,
     pub image_ref: String,
     pub thumb_ref: Option<String>,
+    pub motion_ref: Option<String>,
     pub attachment: Attachment,
 }
 
@@ -59,6 +61,7 @@ impl fmt::Debug for MediaUpload {
             .field("kind", &self.kind)
             .field("image_ref", &self.image_ref)
             .field("thumb_ref", &self.thumb_ref)
+            .field("motion_ref", &self.motion_ref)
             .field("attachment", &Unkeyed(&self.attachment))
             .field("state", &self.state)
             .field("object", &self.object)
@@ -82,6 +85,7 @@ impl fmt::Debug for NewUpload {
             .field("kind", &self.kind)
             .field("image_ref", &self.image_ref)
             .field("thumb_ref", &self.thumb_ref)
+            .field("motion_ref", &self.motion_ref)
             .field("attachment", &Unkeyed(&self.attachment))
             .finish()
     }
@@ -92,6 +96,7 @@ struct Unkeyed<'a>(&'a Attachment);
 impl fmt::Debug for Unkeyed<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let thumb = self.0.thumb.as_ref();
+        let motion = self.0.motion.as_ref();
         f.debug_struct("Attachment")
             .field("media_id", &self.0.media_id)
             .field("size", &self.0.size)
@@ -99,6 +104,8 @@ impl fmt::Debug for Unkeyed<'_> {
             .field("h", &self.0.h)
             .field("thumb_media_id", &thumb.map(|thumb| &thumb.media_id))
             .field("thumb_size", &thumb.map(|thumb| thumb.size))
+            .field("motion_media_id", &motion.map(|motion| &motion.media_id))
+            .field("motion_size", &motion.map(|motion| motion.size))
             .finish_non_exhaustive()
     }
 }
@@ -107,10 +114,11 @@ impl fmt::Debug for Unkeyed<'_> {
 pub struct Reserved {
     pub media_id: Uuid,
     pub thumb_media_id: Option<Uuid>,
+    pub motion_media_id: Option<Uuid>,
     pub presign_expires_at: Millis,
 }
 
-const COLUMNS: &str = "id, album, position, conversation_id, kind, image_ref, thumb_ref, state, object, media_id, stage_id, parts_sent, presign_expires_at, attempts, created_at, updated_at, nonce, attachment";
+const COLUMNS: &str = "id, album, position, conversation_id, kind, image_ref, thumb_ref, state, object, media_id, stage_id, parts_sent, presign_expires_at, attempts, created_at, updated_at, nonce, attachment, motion_ref";
 
 pub fn load(
     conn: &Connection,
@@ -159,6 +167,7 @@ fn raw(row: &Row) -> rusqlite::Result<Raw> {
             kind: row.get::<_, Label<_>>(4)?.0,
             image_ref: row.get(5)?,
             thumb_ref: row.get(6)?,
+            motion_ref: row.get(18)?,
             attachment: Attachment::default(),
             state: row.get::<_, Label<_>>(7)?.0,
             object: row.get::<_, Label<_>>(8)?.0,

@@ -15,6 +15,7 @@ fn keyed() -> NewUpload {
         kind: MediaKind::Image,
         image_ref: "media/a.img".into(),
         thumb_ref: Some("media/a.thumb".into()),
+        motion_ref: None,
         attachment: Attachment {
             media_id: Uuid::from_u128(3).to_string(),
             size: 4096,

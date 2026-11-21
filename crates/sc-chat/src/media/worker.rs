@@ -7,6 +7,7 @@ use super::MediaError;
 
 pub const DECODE_THREADS: usize = 2;
 pub const DECODE_TIMEOUT: Duration = Duration::from_secs(8);
+pub const PREPARE_TIMEOUT: Duration = Duration::from_secs(60);
 
 struct Slots {
     free: Mutex<usize>,

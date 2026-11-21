@@ -3,6 +3,7 @@ use std::time::Instant;
 use sc_chat::media::{MediaWorker, open_image, open_thumb, prepare_image};
 
 use crate::icc::{p3_profile, with_icc_jpeg};
+use crate::motion::gif;
 use crate::support::*;
 
 #[test]
@@ -46,5 +47,26 @@ fn twelve_megapixels() {
                 opened.bytes.len(),
             );
         }
+    }
+}
+
+#[test]
+#[ignore]
+fn a_gif_of_150_frames() {
+    for (w, h) in [(480, 270), (640, 640)] {
+        let source = gif(w, h, &[60; 150]);
+        let started = Instant::now();
+        let prepared = prepare_image(&source).unwrap();
+        let motion = prepared.attachment.motion.as_ref().unwrap();
+        println!(
+            "{w}x{h} gif {} bytes: prepare {:?}, motion {} bytes {}x{} {} frames {} ms",
+            source.len(),
+            started.elapsed(),
+            motion.size,
+            motion.w,
+            motion.h,
+            motion.frames,
+            motion.duration_ms
+        );
     }
 }

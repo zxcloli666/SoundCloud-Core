@@ -46,6 +46,7 @@ fn queued(store: &Store) -> Uuid {
             size: 24_576,
             ..Thumb::default()
         }),
+        motion: None,
         ..Attachment::default()
     };
     let upload = NewUpload {
@@ -55,6 +56,7 @@ fn queued(store: &Store) -> Uuid {
         kind: MediaKind::Image,
         image_ref: "media/a/0.img".into(),
         thumb_ref: Some("media/a/0.thumb".into()),
+        motion_ref: None,
         attachment,
     };
     store.enqueue_upload(&upload, START_MS).unwrap()

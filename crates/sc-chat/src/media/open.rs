@@ -6,6 +6,7 @@ use image::{ExtendedColorType, ImageEncoder};
 use image_webp::WebPDecoder;
 use sc_chat_wire::proto::{Attachment, Thumb};
 use sha2::{Digest, Sha256};
+use zeroize::Zeroizing;
 
 use super::cipher::{Role, open_blob};
 use super::{
@@ -23,14 +24,14 @@ pub struct OpenedImage {
     pub h: u32,
 }
 
-struct Claim<'a> {
-    role: Role,
-    key: &'a [u8],
-    nonce: &'a [u8],
-    w: u32,
-    h: u32,
-    sha256_cipher: &'a [u8],
-    sha256_plain: &'a [u8],
+pub(super) struct Claim<'a> {
+    pub role: Role,
+    pub key: &'a [u8],
+    pub nonce: &'a [u8],
+    pub w: u32,
+    pub h: u32,
+    pub sha256_cipher: &'a [u8],
+    pub sha256_plain: &'a [u8],
 }
 
 pub fn open_image(
@@ -74,20 +75,11 @@ pub fn open_thumb(
 }
 
 fn open(worker: &MediaWorker, ciphertext: &[u8], claim: &Claim) -> Result<OpenedImage, MediaError> {
-    let (cap, side_cap) = match claim.role {
-        Role::Image => (IMAGE_CAP, RECEIVE_MAX_SIDE),
-        Role::Thumb => (THUMB_SERVER_CAP, RECEIVE_THUMB_SIDE),
+    let side_cap = match claim.role {
+        Role::Image => RECEIVE_MAX_SIDE,
+        Role::Thumb => RECEIVE_THUMB_SIDE,
     };
-    if ciphertext.len() > cap {
-        return Err(MediaError::TooLarge);
-    }
-    if !claim.sha256_cipher.is_empty() && Sha256::digest(ciphertext)[..] != *claim.sha256_cipher {
-        return Err(MediaError::Mismatch);
-    }
-    let plain = open_blob(claim.role, claim.key, claim.nonce, ciphertext)?;
-    if !claim.sha256_plain.is_empty() && Sha256::digest(&plain[..])[..] != *claim.sha256_plain {
-        return Err(MediaError::Mismatch);
-    }
+    let plain = unseal(ciphertext, claim)?;
     let decoder =
         WebPDecoder::new(Cursor::new(plain.to_vec())).map_err(|_| MediaError::Malformed)?;
     if decoder.is_animated() {
@@ -106,6 +98,24 @@ fn open(worker: &MediaWorker, ciphertext: &[u8], claim: &Claim) -> Result<Opened
         .ok_or(MediaError::Dimensions)?;
     let alpha = decoder.has_alpha();
     worker.run(move || decode(decoder, buffer, alpha, (w, h)))
+}
+
+pub(super) fn unseal(ciphertext: &[u8], claim: &Claim) -> Result<Zeroizing<Vec<u8>>, MediaError> {
+    let cap = match claim.role {
+        Role::Image => IMAGE_CAP,
+        Role::Thumb => THUMB_SERVER_CAP,
+    };
+    if ciphertext.len() > cap {
+        return Err(MediaError::TooLarge);
+    }
+    if !claim.sha256_cipher.is_empty() && Sha256::digest(ciphertext)[..] != *claim.sha256_cipher {
+        return Err(MediaError::Mismatch);
+    }
+    let plain = open_blob(claim.role, claim.key, claim.nonce, ciphertext)?;
+    if !claim.sha256_plain.is_empty() && Sha256::digest(&plain[..])[..] != *claim.sha256_plain {
+        return Err(MediaError::Mismatch);
+    }
+    Ok(plain)
 }
 
 fn decode(

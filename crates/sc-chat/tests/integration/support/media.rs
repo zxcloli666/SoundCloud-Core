@@ -57,6 +57,7 @@ pub async fn upload(
         kind,
         image_ref: "integration".into(),
         thumb_ref: None,
+        motion_ref: None,
         attachment,
     };
     let upload_id = store.enqueue_upload(&new, now).unwrap();
