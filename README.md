@@ -9,6 +9,8 @@ A crate lives here only if it is platform neutral: it builds for Windows, Linux,
 | [`sc-chat-wire`](crates/sc-chat-wire) | chat wire format and crypto, the protocol spec and the test vectors |
 | [`sc-chat`](crates/sc-chat) | chat client core: sealed channel, store, sync, outbox, search |
 | [`sc-chat-ffi`](crates/sc-chat-ffi) | UniFFI wrapper of `sc-chat`: an AAR for Android and an XCFramework for iOS, see [docs/chat-mobile.md](docs/chat-mobile.md) |
+| [`sc-diag`](crates/sc-diag) | diagnostics bundle contract of the apps and the Backend; `cargo run -p sc-diag --bin export-diag-contract` writes `contract/diag-contract.json` |
+| [`sc-fingerprint`](crates/sc-fingerprint) | browser TLS and HTTP/2 fingerprints for wreq, the only HTTP client of the apps and the Backend |
 
 Apps pin a crate by its tag, `<crate>-v<version>`:
 
